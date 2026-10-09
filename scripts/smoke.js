@@ -3,6 +3,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const playerTracker = require('../lib/players');
 
 const ROOT = path.join(__dirname, '..');
@@ -15,6 +16,7 @@ try {
 const PORT = 3999;
 const BASE = `http://localhost:${PORT}`;
 const TEST_TRACKING_TOKEN = 'smoke-test-token-do-not-use-in-production-0123456789abcdef';
+const TEST_DATA_DIRECTORY = fs.mkdtempSync(path.join(os.tmpdir(), 'roblox-ubers-smoke-'));
 const results = [];
 
 async function check(name, fn) {
@@ -28,8 +30,13 @@ async function check(name, fn) {
   }
 }
 
-async function json(pathname, opts) {
-  const res = await fetch(BASE + pathname, opts);
+async function json(pathname, opts = {}) {
+  const request = { ...opts };
+  if (request.body && typeof request.body !== 'string') {
+    request.headers = { 'Content-Type': 'application/json', ...request.headers };
+    request.body = JSON.stringify(request.body);
+  }
+  const res = await fetch(BASE + pathname, request);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
   return body;
@@ -56,7 +63,13 @@ function waitForServer(child, ms = 10000) {
 
 async function main() {
   const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-    env: { ...process.env, PORT: String(PORT), BASE_URL: BASE, TRACKING_TOKEN: TEST_TRACKING_TOKEN },
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      BASE_URL: BASE,
+      TRACKING_TOKEN: TEST_TRACKING_TOKEN,
+      UBERS_DATA_DIR: TEST_DATA_DIRECTORY
+    },
     stdio: 'ignore'
   });
 
@@ -138,7 +151,88 @@ async function main() {
           !allowedHeaders.toLowerCase().includes('cf-skip-browser-warning')) {
         throw new Error('browser API preflight was not allowed');
       }
+      const methods = preflight.headers.get('access-control-allow-methods') || '';
+      if (!methods.includes('DELETE')) throw new Error('booking cancellation method is not allowed');
       return 'GitHub Pages origin allowed';
+    });
+
+    await check('roleplay-bookings-and-timetable', async () => {
+      const schedule = await json('/api/rides/timetable?map=brookhaven&routeId=b1');
+      if (schedule.route.id !== 'b1' || !schedule.departures.length ||
+          schedule.departures.some((slot) => !Number.isFinite(slot.seatsAvailable) || slot.seatsAvailable !== 32)) {
+        throw new Error('invalid route timetable or seat availability');
+      }
+      const firstDeparture = schedule.departures[0].departureAt;
+      const bookings = [];
+      for (let index = 0; index < 8; index++) {
+        const result = await json('/api/bookings', {
+          method: 'POST',
+          body: {
+            mapId: 'brookhaven',
+            routeId: 'b1',
+            pickupPoiId: 'fountain',
+            dropoffPoiId: 'hospital',
+            departureAt: firstDeparture,
+            seats: 4,
+            riderName: `Roleplay ${index + 1}`
+          }
+        });
+        if (!result.booking.reference.startsWith('UBR-') || !/^[a-f0-9]{64}$/.test(result.booking.manageKey)) {
+          throw new Error('booking reference or private key missing');
+        }
+        bookings.push(result.booking);
+      }
+      const fullTimetable = await json('/api/rides/timetable?map=brookhaven&routeId=b1');
+      if (fullTimetable.departures.some((slot) => slot.departureAt === firstDeparture)) {
+        throw new Error('full departure remained bookable');
+      }
+      const privateLookup = await json(`/api/bookings/${bookings[0].reference}/lookup`, {
+        method: 'POST',
+        body: { manageKey: bookings[0].manageKey }
+      });
+      if (privateLookup.booking.riderName !== 'Roleplay 1' || privateLookup.booking.manageKey) {
+        throw new Error('private lookup did not protect the management key');
+      }
+      const denied = await fetch(`${BASE}/api/bookings/${bookings[0].reference}/lookup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manageKey: '0'.repeat(64) })
+      });
+      if (denied.status !== 404) throw new Error(`invalid management key returned ${denied.status}`);
+      const cancelled = await json(`/api/bookings/${bookings[0].reference}`, {
+        method: 'DELETE',
+        body: { manageKey: bookings[0].manageKey }
+      });
+      if (cancelled.booking.status !== 'cancelled') throw new Error('booking was not cancelled');
+      const reopened = await json('/api/rides/timetable?map=brookhaven&routeId=b1');
+      if (reopened.departures.find((slot) => slot.departureAt === firstDeparture)?.seatsAvailable !== 4) {
+        throw new Error('cancelled seats were not released');
+      }
+      const invalid = await fetch(`${BASE}/api/bookings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mapId: 'brookhaven', routeId: 'b1', pickupPoiId: 'fountain', dropoffPoiId: 'fountain',
+          departureAt: firstDeparture, seats: 5, riderName: 'invalid'
+        })
+      });
+      if (invalid.status !== 400) throw new Error(`invalid booking returned ${invalid.status}`);
+      const saved = fs.readFileSync(path.join(TEST_DATA_DIRECTORY, 'bookings.json'), 'utf8');
+      if (saved.includes(bookings[0].manageKey) || !saved.includes(bookings[0].reference)) {
+        throw new Error('management secret was stored in plaintext or booking was not persisted');
+      }
+      const previousDataDirectory = process.env.UBERS_DATA_DIR;
+      process.env.UBERS_DATA_DIR = TEST_DATA_DIRECTORY;
+      try {
+        const reopenedStore = require('../lib/bookings');
+        if (!reopenedStore.get(bookings[1].reference, bookings[1].manageKey)) {
+          throw new Error('booking could not be loaded again from persistent storage');
+        }
+      } finally {
+        if (previousDataDirectory === undefined) delete process.env.UBERS_DATA_DIR;
+        else process.env.UBERS_DATA_DIR = previousDataDirectory;
+      }
+      return 'persistence across store reload, capacity, private lookup, cancellation, validation and hashed key verified';
     });
 
     await check('ai-chat', async () => {
@@ -273,11 +367,18 @@ async function main() {
     await check('spa-fallback', async () => {
       const res = await fetch(`${BASE}/#map`);
       const html = await res.text();
-      if (!html.includes('ROBLOX UBERS')) throw new Error('index not served');
-      return 'index.html ok';
+      for (const text of ['ROBLOX UBERS', 'bookingForm', 'view-faq', 'view-legal', '© 2026']) {
+        if (!html.includes(text)) throw new Error(`index is missing ${text}`);
+      }
+      const banner = await fetch(`${BASE}/assets/uber-banner.svg`);
+      if (!banner.ok || !(await banner.text()).includes('UBERS roleplay ride banner')) {
+        throw new Error('brand banner was not served');
+      }
+      return 'booking, FAQ, terms, copyright and SVG banner are served';
     });
   } finally {
     child.kill();
+    fs.rmSync(TEST_DATA_DIRECTORY, { recursive: true, force: true });
   }
 
   const failed = results.filter((r) => !r.ok);

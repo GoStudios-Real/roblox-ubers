@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 420" role="img" aria-labelledby="title desc">
+  <title id="title">UBERS roleplay ride banner</title>
+  <desc id="desc">Original illustration of a yellow taxi following a bright route through a playful night-time city.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#182e50"/>
+      <stop offset=".55" stop-color="#44335d"/>
+      <stop offset="1" stop-color="#10253e"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#182237"/>
+      <stop offset="1" stop-color="#0a1120"/>
+    </linearGradient>
+    <linearGradient id="taxi" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#ffe08a"/>
+      <stop offset="1" stop-color="#ffb827"/>
+    </linearGradient>
+    <pattern id="windows" width="50" height="46" patternUnits="userSpaceOnUse">
+      <rect x="9" y="9" width="22" height="25" rx="4" fill="#78cfff" opacity=".65"/>
+      <path d="M11 15h18" stroke="#d4f2ff" stroke-opacity=".45" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect width="1400" height="420" fill="url(#sky)"/>
+  <circle cx="1110" cy="70" r="31" fill="#ffd166" opacity=".85"/>
+  <path d="M0 267V137h126v130Zm149 0V94h164v173Zm191 0V157h124v110Zm147 0V110h179v157Zm200 0V74h153v193Zm177 0V141h133v126Zm156 0V105h139v162Z" fill="#17233b"/>
+  <path d="M0 267V137h126v130Zm149 0V94h164v173Zm191 0V157h124v110Zm147 0V110h179v157Zm200 0V74h153v193Zm177 0V141h133v126Zm156 0V105h139v162Z" fill="url(#windows)" opacity=".65"/>
+  <path d="M0 284c159-23 244 19 383-4s214-42 350-7 215 33 343-2 197-18 324 1v52H0Z" fill="none" stroke="#4dd2ff" stroke-width="7" stroke-linecap="round" stroke-dasharray="1 19" opacity=".9"/>
+  <path d="M0 309c190-28 252 15 402-5s220-40 363-6 211 34 342-2 184-15 293 0v124H0Z" fill="url(#road)"/>
+  <path d="M70 370c171-28 247 12 409-5s254-35 389-6 235 21 392-10" fill="none" stroke="#ffd166" stroke-width="5" stroke-linecap="round" stroke-dasharray="27 23" opacity=".6"/>
+  <g transform="translate(625 181)">
+    <ellipse cx="155" cy="174" rx="179" ry="20" fill="#070b13" opacity=".55"/>
+    <path d="M29 103 58 45a31 31 0 0 1 28-18h117a31 31 0 0 1 27 16l40 60 23 9a21 21 0 0 1 14 20v27a17 17 0 0 1-17 17H17a17 17 0 0 1-17-17v-28a23 23 0 0 1 17-22l12-6Z" fill="url(#taxi)" stroke="#ffda74" stroke-width="4"/>
+    <path d="m69 51 16-13a14 14 0 0 1 9-4h34v57H43l21-40Zm73-17h78a15 15 0 0 1 13 8l34 49h-125V34Z" fill="#19314d"/>
+    <path d="M73 54 60 82h60V42H96a13 13 0 0 0-8 3l-15 9Zm77-12v40h105l-28-41a11 11 0 0 0-9-5h-68Z" fill="#6dc8f1" opacity=".88"/>
+    <path d="M102 2h62v18h-62z" rx="5" fill="#ffd166" stroke="#fff0bd" stroke-width="3"/>
+    <text x="133" y="16" fill="#25243a" font-family="Arial,sans-serif" font-size="12" font-weight="900" text-anchor="middle">UBERS</text>
+    <path d="M1 113h287v23H1z" fill="#202945"/>
+    <path d="M31 118h45v13H31zm53 0h45v13H84zm53 0h45v13h-45zm53 0h45v13h-45zm53 0h34v13h-34z" fill="#ffd166" opacity=".9"/>
+    <circle cx="66" cy="171" r="24" fill="#101827" stroke="#8492a9" stroke-width="7"/>
+    <circle cx="66" cy="171" r="8" fill="#d6deeb"/>
+    <circle cx="240" cy="171" r="24" fill="#101827" stroke="#8492a9" stroke-width="7"/>
+    <circle cx="240" cy="171" r="8" fill="#d6deeb"/>
+    <path d="M4 137h17v12H3zm271 0h15v12h-15z" fill="#fff2c7"/>
+  </g>
+  <g fill="#4dd2ff">
+    <circle cx="437" cy="303" r="5"/><circle cx="470" cy="300" r="4"/><circle cx="496" cy="294" r="3"/>
+  </g>
+  <g fill="#ffd166" opacity=".85">
+    <circle cx="1243" cy="297" r="5"/><circle cx="1271" cy="300" r="4"/><circle cx="1296" cy="298" r="3"/>
+  </g>
+</svg>

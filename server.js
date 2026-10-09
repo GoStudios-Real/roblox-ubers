@@ -12,6 +12,7 @@ const Stripe = require('stripe');
 const { MAPS, getMap } = require('./lib/maps');
 const fleet = require('./lib/fleet');
 const players = require('./lib/players');
+const bookings = require('./lib/bookings');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -32,7 +33,7 @@ app.use((req, res, next) => {
   const origin = req.get('origin');
   if (origin && CORS_ORIGINS.has(origin)) {
     res.set('Access-Control-Allow-Origin', origin);
-    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.set('Access-Control-Allow-Headers', 'Content-Type, cf-skip-browser-warning');
     res.vary('Origin');
   }
@@ -71,6 +72,37 @@ app.get('/api/maps', (_req, res) => h(res, 200, { maps: Object.values(MAPS) }));
 app.get('/api/maps/:id', (req, res) => {
   const map = getMap(req.params.id);
   return map ? h(res, 200, map) : h(res, 404, { error: 'map not found' });
+});
+
+// ---------- Roleplay rides ----------
+app.get('/api/rides/timetable', (req, res) => {
+  try {
+    h(res, 200, bookings.timetable(String(req.query.map || ''), String(req.query.routeId || '')));
+  } catch (error) {
+    h(res, error.statusCode || 500, { error: error.message });
+  }
+});
+
+app.post('/api/bookings', (req, res) => {
+  try {
+    h(res, 201, { booking: bookings.create(req.body) });
+  } catch (error) {
+    h(res, error.statusCode || 500, { error: error.message });
+  }
+});
+
+app.post('/api/bookings/:id/lookup', (req, res) => {
+  const booking = bookings.get(req.params.id, req.body?.manageKey);
+  return booking ? h(res, 200, { booking }) : h(res, 404, { error: 'Booking not found. Check the reference and management key.' });
+});
+
+app.delete('/api/bookings/:id', (req, res) => {
+  try {
+    const booking = bookings.cancel(req.params.id, req.body?.manageKey);
+    return booking ? h(res, 200, { booking }) : h(res, 404, { error: 'Booking not found. Check the reference and management key.' });
+  } catch (error) {
+    return h(res, error.statusCode || 500, { error: error.message });
+  }
 });
 
 // ---------- Tracking ----------
@@ -273,7 +305,7 @@ function rateLimit(ip, max = 20, windowMs = 60000) {
 }
 
 const SYSTEM_PROMPT = [
-  'You are the official support assistant for ROBLOX UBERS, a live vehicle tracking website for Roblox roleplay games',
+  'You are the unofficial support assistant for ROBLOX UBERS, an independent fan-made roleplay website',
   '(Brookhaven RP and Welcome to Bloxburg).',
   'You can track cars, buses and taxis on the Live Map, connect to FREE WiFi hotspots on the map,',
   'and subscribe to UBERS Premium with Stripe.',

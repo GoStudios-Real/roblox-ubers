@@ -12,7 +12,8 @@ const state = {
   filter: 'all',
   search: '',
   selected: null,
-  wifiFilterOn: false
+  wifiFilterOn: false,
+  bookingSlots: []
 };
 
 const ICON = { car: '🚗', bus: '🚌', taxi: '🚕' };
@@ -36,6 +37,9 @@ async function staticApi(path, opts = {}) {
   const url = new URL(path, location.href);
   const method = (opts.method || 'GET').toUpperCase();
   const { maps } = window.UBERS_STATIC_DATA;
+  if (url.pathname.includes('/api/rides/timetable') || url.pathname.includes('/api/bookings')) {
+    throw new Error('Roleplay timetables and bookings need the UBERS server and its Cloudflare HTTPS API connection.');
+  }
   const statsFor = (items) => ({
     total: items.length,
     cars: items.filter((v) => v.type === 'car').length,
@@ -112,6 +116,304 @@ $$('#tabs .tab').forEach((btn) =>
     if (btn.dataset.view === 'ai') $('#chatInput').focus();
   })
 );
+
+$$('[data-navigate]').forEach((btn) =>
+  btn.addEventListener('click', () => activateView(btn.dataset.navigate))
+);
+
+/* ---------------- roleplay bookings ---------------- */
+const bookingStorageKey = 'roblox-ubers-bookings';
+let timetableRequest = 0;
+
+function localDateKey(value) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function configureBookingForm() {
+  const map = state.maps[$('#rideMap').value];
+  if (!map) return;
+  const routeSelect = $('#rideRoute');
+  const previousRoute = routeSelect.value;
+  routeSelect.replaceChildren(...map.routes.map((route) => {
+    const option = document.createElement('option');
+    option.value = route.id;
+    option.textContent = route.name;
+    return option;
+  }));
+  if (map.routes.some((route) => route.id === previousRoute)) routeSelect.value = previousRoute;
+
+  const stops = map.pois.filter((poi) => poi.cat !== 'wifi');
+  for (const select of [$('#ridePickup'), $('#rideDropoff')]) {
+    const previousStop = select.value;
+    select.replaceChildren(...stops.map((poi) => {
+      const option = document.createElement('option');
+      option.value = poi.id;
+      option.textContent = poi.name;
+      return option;
+    }));
+    if (stops.some((poi) => poi.id === previousStop)) select.value = previousStop;
+  }
+  if ($('#ridePickup').value === $('#rideDropoff').value && stops.length > 1) {
+    $('#rideDropoff').selectedIndex = 1;
+  }
+  loadTimetable();
+}
+
+function savedBookings() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(bookingStorageKey) || '[]');
+    return Array.isArray(stored)
+      ? stored.filter((item) => item && typeof item.reference === 'string' && typeof item.key === 'string').slice(-20)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveBooking(reference, key) {
+  const all = savedBookings().filter((item) => item.reference !== reference);
+  all.push({ reference, key });
+  try {
+    localStorage.setItem(bookingStorageKey, JSON.stringify(all.slice(-20)));
+  } catch {
+    toast('Booking confirmed. Save your management key somewhere safe; this browser could not store it.');
+  }
+  renderSavedBookings();
+}
+
+function renderSavedBookings() {
+  const list = $('#savedBookingList');
+  if (!list) return;
+  list.replaceChildren();
+  const entries = savedBookings();
+  if (!entries.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'No locally saved bookings yet.';
+    list.appendChild(empty);
+    return;
+  }
+  entries.forEach((entry) => {
+    const row = document.createElement('div');
+    row.className = 'saved-booking';
+    const reference = document.createElement('b');
+    reference.textContent = entry.reference;
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'btn ghost';
+    open.textContent = 'View';
+    open.addEventListener('click', () => lookupBooking(entry.reference, entry.key));
+    row.append(reference, open);
+    list.appendChild(row);
+  });
+}
+
+function setBookingResult(title, message, isError = false, manageKey = '') {
+  const result = $('#bookingResult');
+  result.replaceChildren();
+  result.hidden = false;
+  result.classList.toggle('error', isError);
+  const heading = document.createElement('h3');
+  heading.textContent = title;
+  const text = document.createElement('p');
+  text.textContent = message;
+  result.append(heading, text);
+  if (manageKey) {
+    const label = document.createElement('p');
+    label.textContent = 'Private management key (shown once): ';
+    const key = document.createElement('code');
+    key.textContent = manageKey;
+    label.append(key);
+    result.appendChild(label);
+    const hint = document.createElement('p');
+    hint.textContent = 'Save this key. It is needed to view or cancel the booking and cannot be recovered if lost.';
+    result.appendChild(hint);
+  }
+}
+
+function updateSeatOptions() {
+  const select = $('#rideSeats');
+  const departureAt = $('#rideDeparture').value;
+  const available = state.bookingSlots.find((slot) => slot.departureAt === departureAt)?.seatsAvailable || 4;
+  const selected = Math.min(Number(select.value) || 1, available);
+  select.replaceChildren(...Array.from({ length: Math.min(4, available) }, (_, index) =>
+    new Option(`${index + 1} seat${index ? 's' : ''}`, String(index + 1))
+  ));
+  select.value = String(selected);
+}
+
+async function loadTimetable() {
+  const requestId = ++timetableRequest;
+  const list = $('#timetableList');
+  const departureSelect = $('#rideDeparture');
+  if (!list || !departureSelect) return;
+  const mapId = $('#rideMap').value;
+  const routeId = $('#rideRoute').value;
+  const date = $('#rideDate').value;
+  state.bookingSlots = [];
+  updateSeatOptions();
+  departureSelect.disabled = true;
+  departureSelect.replaceChildren(new Option('Loading departures…', ''));
+  list.replaceChildren();
+  if (!mapId || !routeId || !date) return;
+  try {
+    const data = await api(`/api/rides/timetable?map=${encodeURIComponent(mapId)}&routeId=${encodeURIComponent(routeId)}`);
+    if (requestId !== timetableRequest) return;
+    const slots = data.departures.filter((slot) => localDateKey(slot.departureAt) === date);
+    state.bookingSlots = slots;
+    departureSelect.replaceChildren();
+    if (!slots.length) {
+      departureSelect.add(new Option('No departures available for this date', ''));
+      departureSelect.disabled = true;
+      const note = document.createElement('p');
+      note.textContent = 'No seats are available for this route and date. Try another day.';
+      list.appendChild(note);
+      return;
+    }
+    departureSelect.add(new Option('Select a departure time', ''));
+    const preview = document.createElement('div');
+    const heading = document.createElement('h3');
+    heading.textContent = `${data.route.name} · ${slots.length} departures`;
+    preview.appendChild(heading);
+    slots.forEach((slot) => {
+      const time = new Date(slot.departureAt);
+      const label = `${time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${slot.seatsAvailable} seats`;
+      departureSelect.add(new Option(label, slot.departureAt));
+      const item = document.createElement('p');
+      item.className = 'slot-note';
+      item.textContent = `${time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} — ${slot.seatsAvailable} seat${slot.seatsAvailable === 1 ? '' : 's'} available`;
+      preview.appendChild(item);
+    });
+    list.appendChild(preview);
+    departureSelect.disabled = false;
+    updateSeatOptions();
+  } catch (error) {
+    if (requestId !== timetableRequest) return;
+    state.bookingSlots = [];
+    departureSelect.replaceChildren(new Option('Timetable unavailable', ''));
+    const note = document.createElement('p');
+    note.textContent = error.message;
+    list.appendChild(note);
+  }
+}
+
+function renderBookingCard(booking, manageKey) {
+  const container = $('#bookingDetails');
+  container.replaceChildren();
+  const card = document.createElement('div');
+  card.className = 'card booking-card';
+  const title = document.createElement('h3');
+  title.textContent = `${booking.reference} · ${booking.mapName}`;
+  const details = document.createElement('p');
+  details.textContent = `${booking.routeName} · ${booking.pickupName} → ${booking.dropoffName}`;
+  const departure = document.createElement('p');
+  departure.textContent = `${new Date(booking.departureAt).toLocaleString()} · ${booking.seats} seat${booking.seats === 1 ? '' : 's'} · ${booking.riderName}`;
+  const status = document.createElement('p');
+  status.className = `booking-status${booking.status === 'cancelled' ? ' cancelled' : ''}`;
+  status.textContent = `Status: ${booking.status}`;
+  card.append(title, details, departure, status);
+  if (booking.status === 'confirmed' && Date.parse(booking.departureAt) > Date.now()) {
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'btn ghost';
+    cancel.textContent = 'Cancel booking';
+    cancel.addEventListener('click', async () => {
+      cancel.disabled = true;
+      try {
+        const result = await api(`/api/bookings/${encodeURIComponent(booking.reference)}`, {
+          method: 'DELETE',
+          body: { manageKey }
+        });
+        renderBookingCard(result.booking, manageKey);
+      } catch (error) {
+        toast(error.message);
+        cancel.disabled = false;
+      }
+    });
+    card.appendChild(cancel);
+  }
+  container.appendChild(card);
+}
+
+async function lookupBooking(reference, key) {
+  $('#lookupReference').value = reference;
+  $('#lookupKey').value = key;
+  const details = $('#bookingDetails');
+  details.replaceChildren();
+  const loading = document.createElement('p');
+  loading.className = 'muted';
+  loading.textContent = 'Looking up booking…';
+  details.appendChild(loading);
+  try {
+    const result = await api(`/api/bookings/${encodeURIComponent(reference)}/lookup`, {
+      method: 'POST',
+      body: { manageKey: key }
+    });
+    renderBookingCard(result.booking, key);
+  } catch (error) {
+    details.replaceChildren();
+    const message = document.createElement('p');
+    message.className = 'booking-result error';
+    message.textContent = error.message;
+    details.appendChild(message);
+  }
+}
+
+$('#rideMap').addEventListener('change', configureBookingForm);
+$('#rideRoute').addEventListener('change', loadTimetable);
+$('#rideDate').addEventListener('change', loadTimetable);
+$('#rideDeparture').addEventListener('change', updateSeatOptions);
+$('#bookingForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const submit = $('#bookingSubmit');
+  submit.disabled = true;
+  try {
+    const result = await api('/api/bookings', {
+      method: 'POST',
+      body: {
+        mapId: $('#rideMap').value,
+        routeId: $('#rideRoute').value,
+        pickupPoiId: $('#ridePickup').value,
+        dropoffPoiId: $('#rideDropoff').value,
+        departureAt: $('#rideDeparture').value,
+        seats: Number($('#rideSeats').value),
+        riderName: $('#rideName').value
+      }
+    });
+    const booking = result.booking;
+    saveBooking(booking.reference, booking.manageKey);
+    await loadTimetable();
+    setBookingResult(
+      'Your roleplay ride is reserved!',
+      `${booking.reference} · ${booking.routeName} · ${new Date(booking.departureAt).toLocaleString()}`,
+      false,
+      booking.manageKey
+    );
+  } catch (error) {
+    setBookingResult('Booking not completed', error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
+});
+
+$('#lookupForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  lookupBooking($('#lookupReference').value.trim(), $('#lookupKey').value.trim());
+});
+
+function initializeBookingForm() {
+  const date = $('#rideDate');
+  if (!date || !Object.keys(state.maps).length) return;
+  const today = new Date();
+  const lastDate = new Date(today);
+  lastDate.setDate(today.getDate() + 6);
+  date.min = localDateKey(today);
+  date.max = localDateKey(lastDate);
+  date.value = date.min;
+  configureBookingForm();
+  renderSavedBookings();
+}
 
 /* ---------------- map ---------------- */
 function el(tag, attrs = {}, text) {
@@ -638,13 +940,14 @@ function activateView(name, wifiPreselect) {
 async function boot() {
   if (window.UBERS_STATIC_MODE && !window.UBERS_API_BASE_URL) {
     $('.brand-sub').textContent = 'ROBLOX · LIVE DATA NOT CONNECTED';
-    $('#view-integrate .hero p').textContent = 'Configure the Playit HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data.';
-    addMsg('Live Roblox data is not connected yet. Configure the Playit HTTPS tunnel using the setup instructions below.', 'err');
+    $('#view-integrate .hero p').textContent = 'Configure your Cloudflare HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data and roleplay bookings.';
+    addMsg('Live Roblox data and roleplay bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
   }
   try {
     const { maps } = await api('/api/maps');
     maps.forEach((m) => (state.maps[m.id] = m));
     renderMap();
+    initializeBookingForm();
   } catch (e) { toast(e.message); }
 
   await pollTracking();
@@ -653,6 +956,12 @@ async function boot() {
   if (window.UBERS_STATIC_MODE && !window.UBERS_API_BASE_URL) {
     $('#pillLive').textContent = '● API NOT CONNECTED';
     $('#pillLive').classList.remove('live');
+    $('.brand-sub').textContent = 'ROBLOX · LIVE DATA NOT CONNECTED';
+    $('#view-integrate .hero p').textContent = 'Configure your Cloudflare HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data and roleplay bookings.';
+    addMsg('Live Roblox data and roleplay bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
+    $('.brand-sub').textContent = 'ROBLOX · LIVE DATA NOT CONNECTED';
+    $('#view-integrate .hero p').textContent = 'Configure your Cloudflare HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data and roleplay bookings.';
+    addMsg('Live Roblox data and roleplay bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
   } else {
     api('/api/health').then((d) => {
       const on = Object.values(d.integrations).filter(Boolean).length;
