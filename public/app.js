@@ -17,7 +17,9 @@ const ICON = { car: '🚗', bus: '🚌', taxi: '🚕' };
 const TYPE_COLOR = { car: '#ef5da8', bus: '#4dd2ff', taxi: '#ffd166' };
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
+  if (window.UBERS_STATIC_MODE) return staticApi(path, opts);
+  const apiBase = window.UBERS_API_BASE_URL || '';
+  const res = await fetch(`${apiBase}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined
@@ -25,6 +27,66 @@ async function api(path, opts = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
+}
+
+async function staticApi(path, opts = {}) {
+  const url = new URL(path, location.href);
+  const method = (opts.method || 'GET').toUpperCase();
+  const { maps, vehicles } = window.UBERS_STATIC_DATA;
+  const statsFor = (items) => ({
+    total: items.length,
+    cars: items.filter((v) => v.type === 'car').length,
+    buses: items.filter((v) => v.type === 'bus').length,
+    taxis: items.filter((v) => v.type === 'taxi').length,
+    live: items.length,
+    external: 0,
+    updatedAt: Date.now()
+  });
+
+  if (url.pathname.endsWith('/api/maps') && method === 'GET') return { maps };
+  if (url.pathname.endsWith('/api/tracking') && method === 'GET') {
+    const mapId = url.searchParams.get('map');
+    const filtered = vehicles.filter((v) => !mapId || v.map === mapId);
+    return { vehicles: filtered, stats: statsFor(filtered), time: Date.now() };
+  }
+  if (url.pathname.endsWith('/api/health') && method === 'GET') {
+    return { ok: true, name: 'ROBLOX UBERS', integrations: { openrouter: false, stripe: false, robloxApiKey: false, trackingToken: false }, staticMode: true };
+  }
+  if (url.pathname.endsWith('/api/wifi/hotspots') && method === 'GET') {
+    const hotspots = maps.flatMap((map) => map.pois
+      .filter((poi) => poi.cat === 'wifi')
+      .map((poi) => ({ ...poi, map: map.id, mapName: map.name })));
+    return { hotspots, free: true, speed: '100 Mbps', note: 'Demo only: this site does not provide an internet connection.' };
+  }
+  if (url.pathname.endsWith('/api/wifi/connect') && method === 'POST') {
+    const body = opts.body || {};
+    const code = `DEMO-${crypto.getRandomValues(new Uint8Array(3)).reduce((s, n) => s + n.toString(16).padStart(2, '0'), '').toUpperCase()}`;
+    const record = { code, hotspotId: body.hotspotId || 'wifi-downtown', connectedAt: Date.now(), expiresAt: Date.now() + 30 * 60 * 1000 };
+    localStorage.setItem(`ubers-wifi-${code}`, JSON.stringify(record));
+    return { ok: true, ...record, message: 'Demo access code created; no internet connection is provided.' };
+  }
+  if (url.pathname.endsWith('/api/wifi/status') && method === 'GET') {
+    const code = url.searchParams.get('code') || '';
+    const raw = localStorage.getItem(`ubers-wifi-${code}`);
+    if (!raw) throw new Error('Unknown demo code');
+    const record = JSON.parse(raw);
+    return { ...record, active: record.expiresAt > Date.now() };
+  }
+  if (url.pathname.endsWith('/api/billing/plans') && method === 'GET') {
+    const plans = [
+      { id: 'rider', name: 'UBERS Premium - Rider', desc: 'Priority tracking, no ads, ETA alerts', amount: 499, display: '$4.99' },
+      { id: 'driver', name: 'UBERS Premium - Driver', desc: 'List your Roblox vehicle, AI dispatch, payouts-ready', amount: 999, display: '$9.99' },
+      { id: 'fleet', name: 'UBERS Fleet', desc: 'Up to 50 vehicles, webhooks, API access', amount: 2999, display: '$29.99' }
+    ];
+    return { currency: 'USD', plans };
+  }
+  if (url.pathname.endsWith('/api/roblox/games') && method === 'GET') {
+    return { games: maps.map((map) => ({ placeId: map.placeId, name: map.name, error: 'Live stats require the Windows app and a running server.' })) };
+  }
+  if (url.pathname.endsWith('/api/roblox/key-status') && method === 'GET') {
+    return { configured: false, ok: false, message: 'Open the Windows app with a configured server to check an Open Cloud key.' };
+  }
+  throw new Error('This feature needs the Windows app and a running server.');
 }
 
 function toast(msg) {
@@ -285,9 +347,9 @@ async function connectWifi(h) {
     const data = await api('/api/wifi/connect', { method: 'POST', body: { hotspotId: h.id, device: navigator.userAgent.slice(0, 60) } });
     $('#wifiTicket').hidden = false;
     $('#wifiCode').textContent = data.code;
-    $('#wifiMeta').textContent = `${h.name} · expires ${new Date(data.expiresAt).toLocaleTimeString()}`;
+    $('#wifiMeta').textContent = `${h.name} · expires ${new Date(data.expiresAt).toLocaleTimeString()}${window.UBERS_STATIC_MODE ? ' · demo code only; no internet access' : ''}`;
     $('#wifiTicket').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    toast('Connected to ROBLOX UBERS Free WiFi');
+    toast(window.UBERS_STATIC_MODE ? 'Demo access code created' : 'Connected to ROBLOX UBERS Free WiFi');
   } catch (e) { toast(e.message); }
 }
 
@@ -349,7 +411,7 @@ async function loadPlans() {
         <h3>${p.name}</h3>
         <div class="price">${p.display}</div>
         <div class="desc">${p.desc}</div>
-        <button class="btn" data-plan="${p.id}">Subscribe with Stripe</button>`;
+        <button class="btn" data-plan="${p.id}">${window.UBERS_STATIC_MODE ? 'Requires Windows app' : 'Subscribe with Stripe'}</button>`;
       card.querySelector('button').addEventListener('click', async (ev) => {
         const btn = ev.currentTarget;
         btn.disabled = true;
@@ -435,6 +497,14 @@ function activateView(name, wifiPreselect) {
 }
 
 async function boot() {
+  if (window.UBERS_STATIC_MODE) {
+    $('.brand-sub').textContent = 'ROBLOX · STATIC DEMO';
+    $('#view-wifi .hero p').textContent = 'Explore demo hotspots and create a local demo code. This static site does not provide an internet connection.';
+    $('#view-premium .hero p').textContent = 'Premium plans are shown for preview. Stripe checkout requires the Windows app and a configured server.';
+    $('#view-ai .chat-head h3').textContent = 'AI Support (Windows app required)';
+    $('#view-integrate .hero p').textContent = 'GitHub Pages cannot receive Roblox game callbacks. Live vehicle reporting needs a publicly reachable server with the Roblox tracker configured.';
+    addMsg('This GitHub Pages site is a static demo. AI chat needs the Windows app and a configured OpenRouter API key.', 'err');
+  }
   try {
     const { maps } = await api('/api/maps');
     maps.forEach((m) => (state.maps[m.id] = m));
@@ -444,10 +514,15 @@ async function boot() {
   await pollTracking();
   setInterval(pollTracking, 2000);
 
-  api('/api/health').then((d) => {
-    const on = Object.values(d.integrations).filter(Boolean).length;
-    $('#pillLive').textContent = `● LIVE · ${on}/4 APIs`;
-  }).catch(() => {});
+  if (window.UBERS_STATIC_MODE) {
+    $('#pillLive').textContent = '● DEMO · STATIC';
+    $('#pillLive').classList.remove('live');
+  } else {
+    api('/api/health').then((d) => {
+      const on = Object.values(d.integrations).filter(Boolean).length;
+      $('#pillLive').textContent = `● LIVE · ${on}/4 APIs`;
+    }).catch(() => {});
+  }
 
   const initial = location.hash.replace('#', '');
   if (initial) activateView(initial);

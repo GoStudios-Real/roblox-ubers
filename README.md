@@ -25,6 +25,12 @@ npm start               # http://localhost:3000
 npm test                # 11-check smoke test (server + every integration)
 ```
 
+## GitHub Pages and Windows app
+
+The GitHub Pages site will be available at <https://gostudios-real.github.io/roblox-ubers/> after the Pages workflow deploys. It is a static demo with sample vehicles. Demo WiFi codes do not provide internet access; AI support, live Roblox stats, and Stripe checkout require the full server. Roblox vehicle reporting also requires a publicly reachable server. The Pages site deploys from `main` using GitHub Actions (set **Settings → Pages → Build and deployment → Source** to **GitHub Actions**).
+
+To build the Windows executable locally, run `npm ci` and `npm run package:exe`. The portable `dist/ROBLOX-UBERS.exe` starts the full server and opens it in your browser; keep its console window open while using the app. Configure integrations in a `.env` file beside the executable. Publishing a `v*` tag builds the executable and attaches it to a GitHub Release.
+
 Deep links: `/#map` `/#wifi` `/#ai` `/#premium` `/#roblox` `/#integrate`
 
 ## .env
