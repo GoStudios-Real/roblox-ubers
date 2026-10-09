@@ -22,7 +22,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm run build:pages
+      - name: Build Pages site
+        env:
+          UBERS_API_BASE_URL: ${{ vars.UBERS_API_BASE_URL }}
+        run: npm run build:pages
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/pages

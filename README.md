@@ -8,33 +8,41 @@ Live **car / bus / taxi tracking** for Roblox roleplay games — built around **
 
 | Feature | What it does |
 |---|---|
-| 🗺️ Live Map | Pan-free SVG map of Brookhaven + Bloxburg with researched POIs, zones, routes, and live player/vehicle overlays (updates every 2s) |
-| 🚗🚌🚕 Tracking | Cars, buses, and taxis with plate, driver, route, ETA and rating — plus positions reported from a Roblox experience you own |
-| 👤 Player map | Anonymous player positions grouped by game map/server; expires after 20 seconds, with per-player opt-out |
+| 🗺️ Map | Illustrative Brookhaven + Bloxburg map artwork with researched POIs, zones, and routes; position overlays only appear when reported by an experience you own |
+| 🚗🚌🚕 Tracking | Real car, bus, and taxi positions reported from a Roblox experience you own; no generated vehicles |
+| 👤 Player map | Anonymous player positions from a connected Roblox experience you own; expires after 20 seconds, with per-player opt-out |
 | 📶 Free WiFi | Every hotspot on the map issues a free 30-minute access code (`POST /api/wifi/connect`) |
 | 🤖 AI Support | Chat support via **OpenRouter** (`openai/gpt-4o-mini` by default) |
 | 💳 Stripe | Premium plans (Rider / Driver / Fleet) with hosted Checkout |
-| 🎮 Roblox API | Live playing/visits/favorites/rating + game icons from the official Roblox Games & Thumbnails APIs, plus Open Cloud key check |
+| 🎮 Roblox API | Live playing/visits/favorites/rating and icons, plus paginated public server player counts and join links from Roblox's public APIs |
 | 🔌 Roblox script | `roblox/UBERS_VehicleTracker.server.lua` — reports anonymous player positions and tagged vehicles from your own experience |
 
 ## Quick start
 
 ```bash
 npm install
-cp .env.example .env    # add your keys
+copy .env.example .env  # Windows; add your keys
 npm start               # http://localhost:3000
-npm test                # 11-check smoke test (server + every integration)
+npm test
 ```
 
 ## GitHub Pages and Windows app
 
-The GitHub Pages site at <https://gostudios-real.github.io/roblox-ubers/> is a static demo with sample players and vehicles. Demo WiFi codes do not provide internet access; AI support, live Roblox stats, and Stripe checkout require the full server. Pages cannot receive Roblox reports.
+The GitHub Pages site at <https://gostudios-real.github.io/roblox-ubers/> contains no fabricated player or vehicle positions. Its public-server counts and game stats are live when the `UBERS_API_BASE_URL` repository variable points to a running server's Playit HTTPS tunnel; otherwise the site explicitly shows that live data is disconnected. Pages cannot receive Roblox reports directly.
 
 To build the Windows executable locally, run `npm ci` and `npm run package:exe`. The portable `dist/ROBLOX-UBERS.exe` starts the full server and opens it in your browser; keep its console window open while using the app. Configure integrations in a `.env` file beside the executable. Publishing a `v*` tag builds the executable and attaches it to a GitHub Release.
 
+### Connect GitHub Pages through Playit
+
+1. Start the app/server on the Windows computer that will stay online. In Playit, sign in and claim the local agent, then create an **HTTPS** tunnel targeting `localhost:3000`. Keep both the server and Playit agent running.
+2. In the GitHub repository, open **Settings → Secrets and variables → Actions → Variables** and add `UBERS_API_BASE_URL` with the public HTTPS tunnel URL (for example, `https://your-tunnel.example`). Do not include a path.
+3. Run the **Deploy GitHub Pages** workflow again. The backend allows the published Pages origin by default; set `CORS_ORIGINS` in `.env` only if you also need to add another exact website origin.
+
+The Pages site will show **API NOT CONNECTED** until the tunnel is active and the site has been rebuilt with its URL. `PLAYIT_AUTOSTART=true` can try to start an already claimed local agent when the server launches; it cannot sign in, claim the agent, or create a tunnel for you.
+
 ### Real Roblox player positions
 
-Roblox's public Games API reports aggregate player counts, **not a player's location inside a game or its individual server roster**. Live position dots therefore require installing `roblox/UBERS_VehicleTracker.server.lua` in a Roblox experience you own and running this app's server at a publicly reachable HTTPS address. The official Brookhaven and Bloxburg experiences are third-party games; this project cannot install scripts in their servers or read their live player positions. The existing map illustrations are approximations, so configure the script's world bounds to match your experience before using position overlays.
+Roblox's public API reports aggregate player counts and public server counts, but **not player identities or their location inside a game**. Live position dots therefore require installing `roblox/UBERS_VehicleTracker.server.lua` in a Roblox experience you own and running this app's server at a publicly reachable HTTPS address. The official Brookhaven and Bloxburg experiences are third-party games; this project cannot install scripts in their servers or read their live player positions. The map illustrations are approximations, so configure the script's world bounds to match your experience before using position overlays.
 
 1. Generate a long random token with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`, set it as `TRACKING_TOKEN` in the server `.env` and Roblox script, and publish the Node server at a public HTTPS URL. A local-only Windows app/GitHub Pages address cannot receive requests from Roblox servers.
 2. Enable HTTP requests for your Roblox experience. Copy `roblox/UBERS_VehicleTracker.server.lua` to `ServerScriptService`, set `BASE_URL`, the matching token and `MAP_ID`, and configure `WORLD_MIN_X`, `WORLD_MAX_X`, `WORLD_MIN_Z`, and `WORLD_MAX_Z` for the world.
@@ -70,6 +78,7 @@ ROBLOX_API_KEY=...           # optional, Create > Credentials (Open Cloud)
 | GET | `/api/players?map=brookhaven` | Recent anonymous player positions and active game-server count |
 | POST | `/api/players/ping` | Roblox server submits its player position snapshot (`x-ubers-token`) |
 | GET | `/api/roblox/games?placeIds=4924922222,185655149` | Roblox game stats |
+| GET | `/api/roblox/servers?placeId=4924922222` | Up to 100 live public servers with current player counts and a next-page cursor |
 | GET | `/api/roblox/key-status` | Validate your Open Cloud key |
 | POST | `/api/ai/chat` | OpenRouter AI support |
 | GET | `/api/billing/plans` · POST `/api/billing/checkout` | Stripe |
