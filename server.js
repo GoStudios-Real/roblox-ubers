@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const { execFile } = require('child_process');
 if (process.pkg) {
   require('dotenv').config({ path: path.join(path.dirname(process.execPath), '.env') });
@@ -44,6 +45,20 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '256kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+const robloxScriptDownloads = {
+  'UBERS_FakeTown_Starter.server.txt': 'UBERS_FakeTown_Starter.server.lua',
+  'UBERS_Dispatch.server.txt': 'UBERS_Dispatch.server.lua',
+  'UBERS_VehicleTracker.server.txt': 'UBERS_VehicleTracker.server.lua'
+};
+app.get('/downloads/:filename', (req, res, next) => {
+  const sourceName = robloxScriptDownloads[req.params.filename];
+  if (!sourceName) return next();
+  return fs.readFile(path.join(__dirname, 'roblox', sourceName), 'utf8', (error, script) => {
+    if (error) return next(error);
+    res.type('text/plain').attachment(req.params.filename).send(script);
+  });
+});
 
 function h(res, status, obj) {
   res.status(status).json(obj);

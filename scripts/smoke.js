@@ -518,12 +518,21 @@ async function main() {
       if (!html.includes('Roblox scripts for Notepad') || !html.includes('Change the <code>.txt</code> extension to <code>.lua</code>')) {
         throw new Error('Notepad download instructions are missing');
       }
-      for (const script of scripts) {
-        if (!html.includes(`./downloads/${script}`)) {
-          throw new Error(`Notepad download link is missing ${script}`);
+      for (const downloadName of scripts) {
+        const script = downloadName.replace(/\.txt$/, '.lua');
+        if (!html.includes(`./downloads/${downloadName}`)) {
+          throw new Error(`Notepad download link is missing ${downloadName}`);
+        }
+        const response = await fetch(`${BASE}/downloads/${downloadName}`);
+        if (!response.ok) throw new Error(`${downloadName} returned HTTP ${response.status}`);
+        const downloaded = Buffer.from(await response.arrayBuffer());
+        const source = fs.readFileSync(path.join(ROOT, 'roblox', script));
+        if (!downloaded.equals(source)) throw new Error(`${downloadName} differs from its Lua source`);
+        if (!response.headers.get('content-disposition')?.includes('attachment')) {
+          throw new Error(`${downloadName} is not served as a download`);
         }
       }
-      return 'starter, dispatch, and tracker scripts are linked as Notepad-friendly text files';
+      return 'starter, dispatch, and tracker scripts download as source-matching text files';
     });
   } finally {
     child.kill();
