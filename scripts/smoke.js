@@ -68,7 +68,9 @@ async function main() {
       PORT: String(PORT),
       BASE_URL: BASE,
       TRACKING_TOKEN: TEST_TRACKING_TOKEN,
-      UBERS_DATA_DIR: TEST_DATA_DIRECTORY
+      UBERS_DATA_DIR: TEST_DATA_DIRECTORY,
+      ROBLOX_UBERS_PLACE_ID_BROOKHAVEN: '',
+      ROBLOX_UBERS_PLACE_ID_BLOXBURG: ''
     },
     stdio: 'ignore'
   });
@@ -87,7 +89,43 @@ async function main() {
       if (d.maps.length !== 2) throw new Error(`expected 2 maps, got ${d.maps.length}`);
       const missing = d.maps.filter((m) => !m.pois?.length || !m.routes?.length);
       if (missing.length) throw new Error('map missing pois/routes');
+      if (d.maps.some((map) => map.placeId !== null || !map.name.includes('Test'))) {
+        throw new Error('unconfigured maps must not link to third-party games');
+      }
+      const singleMap = await json('/api/maps/brookhaven');
+      if (singleMap.placeId !== null || singleMap.ownerManaged) {
+        throw new Error('single-map endpoint did not apply the owner-place setup gate');
+      }
       return `${d.maps.map((m) => `${m.pois.length} POIs/${m.routes.length} routes`).join(', ')}`;
+    });
+
+    await check('owner-place-configuration', async () => {
+      const envNames = [
+        'ROBLOX_UBERS_PLACE_ID_BROOKHAVEN',
+        'ROBLOX_UBERS_PLACE_ID_BLOXBURG',
+        'ROBLOX_UBERS_GAME_NAME_BROOKHAVEN',
+        'ROBLOX_UBERS_GAME_NAME_BLOXBURG'
+      ];
+      const previous = envNames.map((name) => process.env[name]);
+      try {
+        process.env.ROBLOX_UBERS_PLACE_ID_BROOKHAVEN = '98765432101';
+        process.env.ROBLOX_UBERS_PLACE_ID_BLOXBURG = '98765432102';
+        process.env.ROBLOX_UBERS_GAME_NAME_BROOKHAVEN = 'Owner Town A';
+        process.env.ROBLOX_UBERS_GAME_NAME_BLOXBURG = 'Owner Town B';
+        const { configuredMaps } = require('../lib/maps');
+        const maps = configuredMaps();
+        if (maps.some((map) => !map.ownerManaged || !Number.isSafeInteger(map.placeId)) ||
+            maps[0].placeId !== 98765432101 || maps[1].placeId !== 98765432102 ||
+            maps[0].name !== 'Owner Town A' || maps[1].name !== 'Owner Town B') {
+          throw new Error('configured owner place IDs/names did not flow into the maps');
+        }
+      } finally {
+        envNames.forEach((name, index) => {
+          if (previous[index] === undefined) delete process.env[name];
+          else process.env[name] = previous[index];
+        });
+      }
+      return 'owned place IDs and display names are applied to the map config';
     });
 
     for (const mapId of ['brookhaven', 'bloxburg']) {
@@ -102,27 +140,16 @@ async function main() {
 
     await check('roblox-api', async () => {
       const d = await json('/api/roblox/games');
-      const g = d.games[0];
-      if (!Number.isFinite(g.playing) || !g.icon) throw new Error('missing live stats or icon');
-      return `${g.name}: ${g.playing} playing, ${g.visits} visits, icon ok`;
+      if (!d.setupRequired || d.games.length || !d.message.includes('Official third-party game links are disabled')) {
+        throw new Error('unconfigured owner places should disable public game stats and joins');
+      }
+      return 'game stats and joins are gated until owner place IDs are configured';
     });
 
-    await check('roblox-public-servers', async () => {
-      const d = await json('/api/roblox/servers?placeId=4924922222');
-      if (d.placeId !== 4924922222 || !Array.isArray(d.servers) || !Number.isFinite(d.sampledPlayers)) {
-        throw new Error('invalid public-server response');
-      }
-      if (d.servers.length > 100 || d.servers.some((server) =>
-        typeof server.id !== 'string' || !Number.isFinite(server.playing) ||
-        Object.keys(server).some((key) => !['id', 'playing', 'maxPlayers', 'fps', 'ping'].includes(key))
-      )) throw new Error('invalid server fields or page size');
-      if (d.nextCursor) {
-        const next = await json(`/api/roblox/servers?placeId=4924922222&cursor=${encodeURIComponent(d.nextCursor)}`);
-        if (next.placeId !== d.placeId || !Array.isArray(next.servers) || next.servers.length > 100) {
-          throw new Error('next public-server page is invalid');
-        }
-      }
-      return `${d.servers.length} public servers, ${d.sampledPlayers} sampled players`;
+    await check('roblox-public-servers-require-owner-place', async () => {
+      const res = await fetch(`${BASE}/api/roblox/servers?placeId=4924922222`);
+      if (res.status !== 400) throw new Error(`official third-party place should be rejected, got ${res.status}`);
+      return 'unconfigured third-party places rejected';
     });
 
     await check('roblox-public-servers-validates-place', async () => {
@@ -156,6 +183,16 @@ async function main() {
       return 'GitHub Pages origin allowed';
     });
 
+    await check('roblox-dispatch-api-protects-game-servers', async () => {
+      const denied = await fetch(`${BASE}/api/roblox/dispatch/next?map=brookhaven`);
+      if (denied.status !== 401) throw new Error(`unauthenticated dispatch poll returned ${denied.status}`);
+      const allowed = await json('/api/roblox/dispatch/next?map=brookhaven', {
+        headers: { 'x-ubers-token': TEST_TRACKING_TOKEN }
+      });
+      if (allowed.ride !== null) throw new Error('unexpected ride was dispatched');
+      return 'game-server polling requires the shared server token';
+    });
+
     await check('roleplay-bookings-and-timetable', async () => {
       const schedule = await json('/api/rides/timetable?map=brookhaven&routeId=b1');
       if (schedule.route.id !== 'b1' || !schedule.departures.length ||
@@ -180,6 +217,9 @@ async function main() {
         if (!result.booking.reference.startsWith('UBR-') || !/^[a-f0-9]{64}$/.test(result.booking.manageKey)) {
           throw new Error('booking reference or private key missing');
         }
+        if (result.booking.placeId !== null) {
+          throw new Error('booking linked to a place before an owner ID was configured');
+        }
         bookings.push(result.booking);
       }
       const fullTimetable = await json('/api/rides/timetable?map=brookhaven&routeId=b1');
@@ -199,6 +239,48 @@ async function main() {
         body: JSON.stringify({ manageKey: '0'.repeat(64) })
       });
       if (denied.status !== 404) throw new Error(`invalid management key returned ${denied.status}`);
+
+      const profileResult = await json('/api/roblox/profile', {
+        method: 'POST',
+        body: { username: 'Builderman' }
+      });
+      if (!/^\d+$/.test(String(profileResult.profile.userId)) || !profileResult.profile.profileUrl) {
+        throw new Error('public Roblox profile lookup returned invalid identity fields');
+      }
+      const linked = await json(`/api/bookings/${bookings[1].reference}/profile`, {
+        method: 'POST',
+        body: { manageKey: bookings[1].manageKey, username: 'Builderman' }
+      });
+      if (linked.booking.robloxProfile?.userId !== String(profileResult.profile.userId)) {
+        throw new Error('Roblox profile was not linked to the private booking');
+      }
+
+      const previousDispatchDataDirectory = process.env.UBERS_DATA_DIR;
+      process.env.UBERS_DATA_DIR = TEST_DATA_DIRECTORY;
+      let dispatchStore;
+      try {
+        dispatchStore = require('../lib/bookings');
+      } finally {
+        if (previousDispatchDataDirectory === undefined) delete process.env.UBERS_DATA_DIR;
+        else process.env.UBERS_DATA_DIR = previousDispatchDataDirectory;
+      }
+      const dispatchTime = Date.parse(bookings[1].departureAt);
+      const due = dispatchStore.nextDispatch('brookhaven', dispatchTime);
+      if (due?.reference !== bookings[1].reference) throw new Error('profile-linked ride did not enter dispatch queue');
+      const assigned = dispatchStore.claimDispatch(due.reference, 'brookhaven', 'smoke-server-001', dispatchTime);
+      if (assigned.robloxProfile.userId !== String(profileResult.profile.userId)) {
+        throw new Error('dispatch response did not include the matched Roblox user ID');
+      }
+      if (dispatchStore.updateDispatch(due.reference, 'different-server', 'enroute', dispatchTime)) {
+        throw new Error('another game server updated the ride status');
+      }
+      for (const status of ['enroute', 'arrived', 'picked_up', 'completed']) {
+        dispatchStore.updateDispatch(due.reference, 'smoke-server-001', status, dispatchTime);
+      }
+      if (dispatchStore.get(bookings[1].reference, bookings[1].manageKey).dispatchStatus !== 'completed') {
+        throw new Error('dispatch lifecycle did not persist its completed status');
+      }
+
       const cancelled = await json(`/api/bookings/${bookings[0].reference}`, {
         method: 'DELETE',
         body: { manageKey: bookings[0].manageKey }
@@ -360,14 +442,27 @@ async function main() {
 
     await check('stripe-plans', async () => {
       const d = await json('/api/billing/plans');
-      if (d.plans.length !== 3) throw new Error('expected 3 plans');
+      if (d.plans.length !== 3 || d.checkoutMode !== 'payment' || typeof d.checkoutEnabled !== 'boolean') {
+        throw new Error('expected three plans and explicit Checkout readiness');
+      }
+      if (!d.checkoutEnabled) {
+        const unavailable = await fetch(`${BASE}/api/billing/checkout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plan: 'rider' })
+        });
+        const result = await unavailable.json();
+        if (unavailable.status !== 503 || !result.error.includes('STRIPE_SECRET_KEY')) {
+          throw new Error('missing Stripe secret did not produce a clear Checkout configuration error');
+        }
+      }
       return d.plans.map((p) => p.display).join(' / ');
     });
 
     await check('spa-fallback', async () => {
       const res = await fetch(`${BASE}/#map`);
       const html = await res.text();
-      for (const text of ['ROBLOX UBERS', 'bookingForm', 'view-faq', 'view-legal', '© 2026']) {
+      for (const text of ['ROBLOX UBERS', 'bookingForm', 'soundToggle', 'view-faq', 'view-legal', '© 2026']) {
         if (!html.includes(text)) throw new Error(`index is missing ${text}`);
       }
       const banner = await fetch(`${BASE}/assets/uber-banner.svg`);
@@ -375,6 +470,32 @@ async function main() {
         throw new Error('brand banner was not served');
       }
       return 'booking, FAQ, terms, copyright and SVG banner are served';
+    });
+
+    await check('booking-tracker-and-12-hour-times', async () => {
+      const app = await fetch(`${BASE}/app.js`).then((response) => response.text());
+      const styles = await fetch(`${BASE}/styles.css`).then((response) => response.text());
+      for (const text of [
+        'hour12: true',
+        'role',
+        'progressbar',
+        'aria-valuetext',
+        'refreshBookingDetails()',
+        'roblox://experiences/start',
+        'Launch Roblox app',
+        'Opens your configured original test place',
+        'soundToggle',
+        'AudioContext',
+        'soundPreferenceKey',
+        "playSound('tap')",
+        'Sound off'
+      ]) {
+        if (!app.includes(text)) throw new Error(`booking tracker is missing ${text}`);
+      }
+      for (const text of ['ride-tracking', 'ride-progress-fill', 'ride-stages']) {
+        if (!styles.includes(text)) throw new Error(`booking tracker styles are missing ${text}`);
+      }
+      return 'local AM/PM times, accessible ride progress and live detail refresh are served';
     });
   } finally {
     child.kill();
