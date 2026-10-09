@@ -497,6 +497,14 @@ async function main() {
       }
       return 'local AM/PM times, accessible ride progress and live detail refresh are served';
     });
+
+    await check('static-site-requires-compatible-backend', async () => {
+      const app = await fetch(`${BASE}/app.js`).then((response) => response.text());
+      if (!app.includes('health.apiVersion !== 2') || !app.includes('SERVER UPDATE REQUIRED')) {
+        throw new Error('static site does not reject incompatible API servers safely');
+      }
+      return 'old backend APIs cannot re-enable third-party fallback behavior';
+    });
   } finally {
     child.kill();
     fs.rmSync(TEST_DATA_DIRECTORY, { recursive: true, force: true });
