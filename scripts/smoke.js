@@ -130,10 +130,12 @@ async function main() {
         headers: {
           Origin: 'https://gostudios-real.github.io',
           'Access-Control-Request-Method': 'GET',
-          'Access-Control-Request-Headers': 'content-type'
+          'Access-Control-Request-Headers': 'content-type,cf-skip-browser-warning'
         }
       });
-      if (preflight.status !== 204 || !preflight.headers.get('access-control-allow-headers')?.includes('Content-Type')) {
+      const allowedHeaders = preflight.headers.get('access-control-allow-headers') || '';
+      if (preflight.status !== 204 || !allowedHeaders.includes('Content-Type') ||
+          !allowedHeaders.toLowerCase().includes('cf-skip-browser-warning')) {
         throw new Error('browser API preflight was not allowed');
       }
       return 'GitHub Pages origin allowed';

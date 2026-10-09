@@ -28,17 +28,18 @@ npm test
 
 ## GitHub Pages and Windows app
 
-The GitHub Pages site at <https://gostudios-real.github.io/roblox-ubers/> contains no fabricated player or vehicle positions. Its public-server counts and game stats are live when the `UBERS_API_BASE_URL` repository variable points to a running server's Playit HTTPS tunnel; otherwise the site explicitly shows that live data is disconnected. Pages cannot receive Roblox reports directly.
+The GitHub Pages site at <https://gostudios-real.github.io/roblox-ubers/> contains no fabricated player or vehicle positions. Its public-server counts and game stats are live when the `UBERS_API_BASE_URL` repository variable points to a running server's Cloudflare Tunnel HTTPS URL; otherwise the site explicitly shows that live data is disconnected. Pages cannot receive Roblox reports directly.
 
 To build the Windows executable locally, run `npm ci` and `npm run package:exe`. The portable `dist/ROBLOX-UBERS.exe` starts the full server and opens it in your browser; keep its console window open while using the app. Configure integrations in a `.env` file beside the executable. Publishing a `v*` tag builds the executable and attaches it to a GitHub Release.
 
-### Connect GitHub Pages through Playit
+### Connect GitHub Pages through Cloudflare Tunnel
 
-1. Start the app/server on the Windows computer that will stay online. In Playit, sign in and claim the local agent, then create an **HTTPS** tunnel targeting `localhost:3000`. Keep both the server and Playit agent running.
-2. In the GitHub repository, open **Settings → Secrets and variables → Actions → Variables** and add `UBERS_API_BASE_URL` with the public HTTPS tunnel URL (for example, `https://your-tunnel.example`). Do not include a path.
-3. Run the **Deploy GitHub Pages** workflow again. The backend allows the published Pages origin by default; set `CORS_ORIGINS` in `.env` only if you also need to add another exact website origin.
+1. Install Cloudflare Tunnel (`winget install --id Cloudflare.cloudflared`) and start the app/server on the Windows computer that will stay online.
+2. For a temporary URL that requires no Cloudflare account, run `cloudflared tunnel --url http://127.0.0.1:3000`. Copy the `https://…trycloudflare.com` hostname it prints. Keep this command and the app running; Quick Tunnel URLs change when restarted.
+3. For a permanent hostname, sign in to a Cloudflare account with a domain you control, create a named Tunnel in the Zero Trust dashboard, and configure its public hostname to forward to `http://127.0.0.1:3000`. Keep the installed `cloudflared` connector running.
+4. From the repository folder, run `powershell -ExecutionPolicy Bypass -File .\scripts\start-cloudflare-tunnel.ps1` to create a Quick Tunnel, verify it reaches the local server, save its URL to the repository's `UBERS_API_BASE_URL` Actions variable, and trigger a Pages deployment. Keep the script's tunnel process and the app running. The URL changes if the Quick Tunnel is restarted. For a manually managed or named tunnel, set `UBERS_API_BASE_URL` yourself and run **Deploy GitHub Pages**. The backend allows the published Pages origin by default; set `CORS_ORIGINS` in `.env` only if you need another exact website origin.
 
-The Pages site will show **API NOT CONNECTED** until the tunnel is active and the site has been rebuilt with its URL. `PLAYIT_AUTOSTART=true` can try to start an already claimed local agent when the server launches; it cannot sign in, claim the agent, or create a tunnel for you.
+Quick Tunnels display a browser interstitial unless requests include Cloudflare's `cf-skip-browser-warning` header; the Pages frontend adds that header for `trycloudflare.com` URLs and the server allows it in CORS preflight. Use a named Tunnel for a stable, always-on deployment. Pages shows **API NOT CONNECTED** until a working tunnel hostname is configured and the site is rebuilt.
 
 ### Real Roblox player positions
 

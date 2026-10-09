@@ -33,7 +33,7 @@ app.use((req, res, next) => {
   if (origin && CORS_ORIGINS.has(origin)) {
     res.set('Access-Control-Allow-Origin', origin);
     res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, cf-skip-browser-warning');
     res.vary('Origin');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(origin && !CORS_ORIGINS.has(origin) ? 403 : 204);
@@ -433,16 +433,6 @@ app.get(/^\/(?!api\/).*/, (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`ROBLOX UBERS running on ${BASE_URL}`);
-  if (process.env.PLAYIT_AUTOSTART === 'true') {
-    execFile(process.env.PLAYIT_EXECUTABLE || 'playit.exe', ['start'], { windowsHide: true }, (error) => {
-      if (error) {
-        console.error(`Could not start Playit automatically: ${error.message}`);
-        console.error('Sign in, claim this Playit agent, and create an HTTPS tunnel to localhost:3000.');
-      } else {
-        console.log('Playit service started. Confirm its HTTP tunnel targets localhost:3000.');
-      }
-    });
-  }
   if (process.pkg && process.platform === 'win32' && !process.env.UBERS_NO_BROWSER) {
     execFile('rundll32.exe', ['url.dll,FileProtocolHandler', `http://localhost:${PORT}`], (error) => {
       if (error) console.error(`Could not open your browser. Visit http://localhost:${PORT}`);

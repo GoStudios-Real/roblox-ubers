@@ -21,8 +21,9 @@ const TYPE_COLOR = { car: '#ef5da8', bus: '#4dd2ff', taxi: '#ffd166' };
 async function api(path, opts = {}) {
   const apiBase = window.UBERS_API_BASE_URL || '';
   if (window.UBERS_STATIC_MODE && !apiBase) return staticApi(path, opts);
+  const tunnelHeaders = apiBase.includes('.trycloudflare.com') ? { 'cf-skip-browser-warning': '1' } : {};
   const res = await fetch(`${apiBase}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...tunnelHeaders },
     ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
