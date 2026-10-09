@@ -1,6 +1,6 @@
 # ROBLOX UBERS
 
-Live **car / bus / taxi tracking** for Roblox roleplay games — built around **Brookhaven RP** and **Welcome to Bloxburg**, with **free WiFi hotspots**, **OpenRouter AI support**, **Stripe payments** and the **Roblox API**.
+An Uber-inspired **Roblox roleplay app** for **Brookhaven RP** and **Welcome to Bloxburg**. Plan scheduled in-game rides, reserve and manage seats, see live game/server information, and use the mapped routes, **free WiFi hotspots**, **OpenRouter AI support**, and **Stripe** integrations.
 
 ![status](https://img.shields.io/badge/status-live-brightgreen)
 
@@ -16,6 +16,12 @@ Live **car / bus / taxi tracking** for Roblox roleplay games — built around **
 | 💳 Stripe | Premium plans (Rider / Driver / Fleet) with hosted Checkout |
 | 🎮 Roblox API | Live playing/visits/favorites/rating and icons, plus paginated public server player counts and join links from Roblox's public APIs |
 | 🔌 Roblox script | `roblox/UBERS_VehicleTracker.server.lua` — reports anonymous player positions and tagged vehicles from your own experience |
+| 🗓️ Timetables | 30-minute roleplay departures on configured map routes, shown in the visitor's local time |
+| 🎟️ Ride bookings | Persistent seat reservations, route capacity checks, private booking references, secure management keys, lookup and cancellation |
+| ❔ Help & terms | In-app FAQ, roleplay-only terms, privacy details, third-party trademark notices, and a © 2026 notice |
+| 🎨 Brand art | Original custom SVG ride icon and city/taxi banner |
+
+Bookings are fictional and for game roleplay only. They do not dispatch real vehicles or arrange real-world transport. Timetables, bookings, and cancellation need the Node server; the static Pages site reports when that API is unavailable.
 
 ## Quick start
 
@@ -28,7 +34,7 @@ npm test
 
 ## GitHub Pages and Windows app
 
-The GitHub Pages site at <https://gostudios-real.github.io/roblox-ubers/> contains no fabricated player or vehicle positions. Its public-server counts and game stats are live when the `UBERS_API_BASE_URL` repository variable points to a running server's Cloudflare Tunnel HTTPS URL; otherwise the site explicitly shows that live data is disconnected. Pages cannot receive Roblox reports directly.
+The GitHub Pages site at <https://gostudios-real.github.io/roblox-ubers/> contains no fabricated player or vehicle positions. Its public-server counts, game stats, and roleplay booking API work when the `UBERS_API_BASE_URL` repository variable points to a running server's Cloudflare Tunnel HTTPS URL; otherwise live data and booking actions are explicitly unavailable. Pages cannot receive Roblox reports directly. Booking records are stored by the Node server in `data/bookings.json` during development, or `%LOCALAPPDATA%\ROBLOX-UBERS\bookings.json` when packaged as the Windows app. Set `UBERS_DATA_DIR` to choose another server data directory. Back up and protect that folder.
 
 To build the Windows executable locally, run `npm ci` and `npm run package:exe`. The portable `dist/ROBLOX-UBERS.exe` starts the full server and opens it in your browser; keep its console window open while using the app. Configure integrations in a `.env` file beside the executable. Publishing a `v*` tag builds the executable and attaches it to a GitHub Release.
 
@@ -51,7 +57,7 @@ Roblox's public API reports aggregate player counts and public server counts, bu
 
 The server uses player account IDs only to create an HMAC pseudonym for refreshing dots; it never returns account IDs, usernames, or Roblox server IDs to the browser. Reports are held in memory and expire when the server stops or the 20-second heartbeat is missed. Make tracking clear to players in your experience.
 
-Deep links: `/#map` `/#wifi` `/#ai` `/#premium` `/#roblox` `/#integrate`
+Deep links: `/#book` `/#myrides` `/#map` `/#wifi` `/#ai` `/#premium` `/#roblox` `/#integrate` `/#faq` `/#legal`
 
 ## .env
 
@@ -74,6 +80,10 @@ ROBLOX_API_KEY=...           # optional, Create > Credentials (Open Cloud)
 |---|---|---|
 | GET | `/api/health` | Server + integration status |
 | GET | `/api/maps` · `/api/maps/:id` | Map, zone, POI and route data |
+| GET | `/api/rides/timetable?map=brookhaven&routeId=b1` | Available 30-minute departures and remaining seats for the next 7 days |
+| POST | `/api/bookings` | Reserve 1–4 seats; returns a booking reference and a private management key once |
+| POST | `/api/bookings/:reference/lookup` | Private booking lookup (`manageKey` in request body) |
+| DELETE | `/api/bookings/:reference` | Cancel a future booking (`manageKey` in request body) |
 | GET | `/api/tracking?map=brookhaven` | Live vehicle positions |
 | POST | `/api/tracking/ping` | Roblox place reports vehicles (header `x-ubers-token`) |
 | GET | `/api/players?map=brookhaven` | Recent anonymous player positions and active game-server count |
@@ -95,5 +105,6 @@ See [docs/MAPS_RESEARCH.md](docs/MAPS_RESEARCH.md) for the Brookhaven and Bloxbu
 
 ## Notes
 
-- Fan-made project, not affiliated with Roblox Corporation.
+- ROBLOX UBERS is an independent fan-made project and is not affiliated with, endorsed by, or sponsored by Roblox Corporation, Brookhaven RP/Voldex, Welcome to Bloxburg, or Coffee Stain Studios. Third-party names and marks belong to their owners.
+- ROBLOX UBERS is not claimed as a registered trademark. Original interface artwork © 2026 GoStudios-Real; code is provided under this repository's MIT License.
 - Stripe Checkout requires an activated Stripe account (`charges_enabled`).

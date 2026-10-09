@@ -61,9 +61,17 @@ if (-not $tunnelUrl) {
 
 $health = $null
 $lastError = $null
- $verifyUntil = [DateTime]::UtcNow.AddSeconds(180)
+$hostName = ([Uri]$tunnelUrl).Host
+$verifyUntil = [DateTime]::UtcNow.AddMinutes(6)
 while ([DateTime]::UtcNow -lt $verifyUntil) {
   try {
+    $dns = Invoke-RestMethod -Uri "https://cloudflare-dns.com/dns-query?name=$hostName&type=A" `
+      -Headers @{ Accept = 'application/dns-json' } -TimeoutSec 10
+    if ($dns.Status -ne 0 -or -not $dns.Answer) {
+      $lastError = 'Waiting for the Quick Tunnel DNS record to propagate.'
+      Start-Sleep -Seconds 5
+      continue
+    }
     $health = Invoke-RestMethod -Uri "$tunnelUrl/api/health" `
       -Headers @{ 'cf-skip-browser-warning' = '1'; Origin = 'https://gostudios-real.github.io' } `
       -TimeoutSec 10

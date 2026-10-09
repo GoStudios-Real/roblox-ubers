@@ -3,25 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ROBLOX UBERS - Live Car, Bus & Taxi Tracking</title>
-  <meta name="description" content="Track cars, buses and taxis live across Brookhaven RP and Welcome to Bloxburg. Free WiFi, AI support and Stripe payments." />
+  <title>ROBLOX UBERS - Book Roblox Roleplay Rides</title>
+  <meta name="description" content="Plan roleplay rides, book seats on scheduled Roblox game routes, and explore live game servers in Brookhaven and Bloxburg." />
   <link rel="stylesheet" href="./styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚕</text></svg>" />
+  <link rel="icon" href="./assets/brand-icon.svg" type="image/svg+xml" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="logo">UBERS</span>
-      <span class="brand-sub">ROBLOX · LIVE FLEET</span>
+      <span class="brand-line"><img src="./assets/brand-icon.svg" alt="" /><span class="logo">UBERS</span></span>
+      <span class="brand-sub">ROBLOX · ROLEPLAY RIDES</span>
     </div>
     <a class="btn ghost download-link" href="https://github.com/GoStudios-Real/roblox-ubers/releases/latest/download/ROBLOX-UBERS.exe">Download Windows app</a>
     <nav class="tabs" id="tabs">
+      <button class="tab" data-view="book">Book a ride</button>
+      <button class="tab" data-view="myrides">My bookings</button>
       <button class="tab active" data-view="map">Live Map</button>
       <button class="tab" data-view="wifi">Free WiFi</button>
       <button class="tab" data-view="ai">AI Support</button>
       <button class="tab" data-view="premium">Premium</button>
       <button class="tab" data-view="roblox">Roblox API</button>
       <button class="tab" data-view="integrate">Integrate</button>
+      <button class="tab" data-view="faq">FAQ</button>
+      <button class="tab" data-view="legal">Terms</button>
     </nav>
     <div class="status" id="statusPills">
       <span class="pill" id="pillFleet">FLEET ...</span>
@@ -31,6 +35,93 @@
   </header>
 
   <main>
+    <!-- ============ ROLEPLAY RIDES ============ -->
+    <section class="view" id="view-book">
+      <div class="ride-banner">
+        <img src="./assets/uber-banner.svg" alt="Illustrated UBERS taxi cruising through a colorful roleplay city" />
+        <div class="ride-banner-copy">
+          <span class="eyebrow">YOUR NEXT ROLEPLAY ADVENTURE</span>
+          <h1>Get there together.</h1>
+          <p>Choose a game, plan a route, and reserve seats on a scheduled community roleplay ride.</p>
+        </div>
+      </div>
+      <div class="booking-layout">
+        <form class="card booking-form" id="bookingForm">
+          <div class="panel-head booking-heading">
+            <div><h2>Plan your ride</h2><p class="muted">Free roleplay reservations. No real-world transport.</p></div>
+            <span class="badge">UP TO 4 SEATS</span>
+          </div>
+          <div class="form-grid">
+            <label>Game
+              <select id="rideMap" required>
+                <option value="brookhaven">Brookhaven RP</option>
+                <option value="bloxburg">Welcome to Bloxburg</option>
+              </select>
+            </label>
+            <label>Service
+              <select id="rideRoute" required></select>
+            </label>
+            <label>Pickup
+              <select id="ridePickup" required></select>
+            </label>
+            <label>Drop-off
+              <select id="rideDropoff" required></select>
+            </label>
+            <label>Travel date
+              <input id="rideDate" type="date" required />
+            </label>
+            <label>Seats
+              <select id="rideSeats" required>
+                <option value="1">1 seat</option><option value="2">2 seats</option>
+                <option value="3">3 seats</option><option value="4">4 seats</option>
+              </select>
+            </label>
+            <label class="form-wide">Departure time
+              <select id="rideDeparture" required disabled><option value="">Choose a route and date</option></select>
+            </label>
+            <label class="form-wide">Roleplay display name
+              <input id="rideName" type="text" minlength="2" maxlength="24" autocomplete="nickname" required placeholder="Name for your booking" />
+              <span class="field-hint">Use a roleplay name only. Don't enter your Roblox password, email, or other private details.</span>
+            </label>
+          </div>
+          <div id="timetableList" class="timetable-list" aria-live="polite"></div>
+          <button class="btn booking-submit" id="bookingSubmit" type="submit">Reserve this roleplay ride</button>
+          <p class="muted booking-note">Schedules and seats are for community roleplay only. No actual driver, vehicle, or real-world trip is arranged.</p>
+          <div id="bookingResult" class="booking-result" role="status" hidden></div>
+        </form>
+        <aside class="card ride-benefits">
+          <h3>Made for game nights</h3>
+          <div class="benefit"><span>01</span><div><b>Pick a route</b><p>Explore mapped stops in Brookhaven and Bloxburg.</p></div></div>
+          <div class="benefit"><span>02</span><div><b>Save your seats</b><p>Capacity is shared per route and departure time.</p></div></div>
+          <div class="benefit"><span>03</span><div><b>Keep your reference</b><p>Manage or cancel your booking with its private key.</p></div></div>
+          <button class="btn ghost full-width" type="button" data-navigate="myrides">Find or manage a booking</button>
+        </aside>
+      </div>
+    </section>
+
+    <section class="view" id="view-myrides">
+      <div class="hero">
+        <span class="eyebrow">YOUR ROLEPLAY ITINERARY</span>
+        <h1>My bookings</h1>
+        <p>Bookings are private. Enter your booking reference and the management key shown once when you reserved.</p>
+      </div>
+      <div class="booking-layout">
+        <form class="card lookup-form" id="lookupForm">
+          <h2>Find a booking</h2>
+          <label>Booking reference<input id="lookupReference" required placeholder="UBR-XXXXXXXX" autocomplete="off" /></label>
+          <label>Private management key<input id="lookupKey" required placeholder="Paste the key saved when booking" autocomplete="off" /></label>
+          <button class="btn" type="submit">Look up booking</button>
+          <p class="field-hint">The private key is a bearer credential. Keep it secret and don't share it with anyone.</p>
+        </form>
+        <div class="card saved-bookings">
+          <h3>This browser</h3>
+          <p class="muted">Booking keys are saved only in this browser to make your itinerary easier to find.</p>
+          <div id="savedBookingList"></div>
+        </div>
+      </div>
+      <div id="bookingDetails" class="booking-details" aria-live="polite"></div>
+    </section>
+
     <!-- ============ LIVE MAP ============ -->
     <section class="view active" id="view-map">
       <div class="map-toolbar">
@@ -182,6 +273,10 @@ npm start              # http://localhost:3000</code></pre>
         <h3>Endpoints</h3>
         <table class="api">
           <tr><td>GET</td><td>/api/tracking?map=brookhaven</td><td>Live vehicle positions</td></tr>
+          <tr><td>GET</td><td>/api/rides/timetable?map=brookhaven&amp;routeId=b1</td><td>Roleplay departures and remaining seats</td></tr>
+          <tr><td>POST</td><td>/api/bookings</td><td>Reserve 1–4 roleplay seats</td></tr>
+          <tr><td>POST</td><td>/api/bookings/:reference/lookup</td><td>Private booking lookup (management key in body)</td></tr>
+          <tr><td>DELETE</td><td>/api/bookings/:reference</td><td>Cancel a future booking (management key in body)</td></tr>
           <tr><td>POST</td><td>/api/tracking/ping</td><td>Roblox place reports vehicles (x-ubers-token)</td></tr>
           <tr><td>GET</td><td>/api/players?map=brookhaven</td><td>Anonymous, recent player positions</td></tr>
           <tr><td>POST</td><td>/api/players/ping</td><td>Roblox server reports its player roster (x-ubers-token)</td></tr>
@@ -192,10 +287,52 @@ npm start              # http://localhost:3000</code></pre>
         </table>
       </div>
     </section>
+
+    <section class="view" id="view-faq">
+      <div class="hero">
+        <span class="eyebrow">HELP &amp; HOW-TO</span>
+        <h1>Frequently asked questions</h1>
+        <p>Quick answers about roleplay bookings, live game information, and how this fan project works.</p>
+      </div>
+      <div class="faq-list">
+        <details class="card"><summary>Are these real rides or real vehicles?</summary><p>No. UBERS is a fan-made Roblox roleplay dashboard. Reservations are fictional schedules for in-game play and do not arrange transportation, hire drivers, or dispatch real vehicles.</p></details>
+        <details class="card"><summary>How do I book and manage a ride?</summary><p>Choose Book a ride, select a game, route, stops, departure and seats, then enter a roleplay display name. Save the booking reference and private management key. Use both under My bookings to view or cancel it.</p></details>
+        <details class="card"><summary>Why can't I see players on the map?</summary><p>Roblox's public APIs provide aggregate game and public-server information, not player identities or in-world positions. Anonymous position dots only appear for a Roblox experience whose owner has installed and configured this project's tracker.</p></details>
+        <details class="card"><summary>Are seat times and capacity real-time?</summary><p>Seat availability updates from bookings stored on the connected UBERS server. The timetable is a roleplay schedule, not a live vehicle estimate; it doesn't guarantee a player or vehicle will be present in the game.</p></details>
+        <details class="card"><summary>What if the website says bookings aren't connected?</summary><p>GitHub Pages is static. Timetables, booking storage, and cancellation need the UBERS Node server and its HTTPS API tunnel to be online. The Windows app runs the server locally; a Cloudflare Quick Tunnel only works while its connector is running and its address can change.</p></details>
+        <details class="card"><summary>What information do you need?</summary><p>A short roleplay display name, selected stops, departure, and number of seats are stored on the server to manage the booking. Do not enter passwords, email addresses, phone numbers, or other sensitive personal information. Public timetable responses never list rider names or booking references.</p></details>
+        <details class="card"><summary>How do I contact the game creators?</summary><p>ROBLOX UBERS is not affiliated with, endorsed by, or sponsored by Roblox Corporation or the creators of Brookhaven RP or Welcome to Bloxburg. Please use their official support channels for game-specific help.</p></details>
+      </div>
+    </section>
+
+    <section class="view" id="view-legal">
+      <div class="hero">
+        <span class="eyebrow">LAST UPDATED: 2026</span>
+        <h1>Terms of service &amp; privacy</h1>
+        <p>By using ROBLOX UBERS, you agree to these terms. This is an independent fan project for entertainment and roleplay.</p>
+      </div>
+      <article class="card legal-copy">
+        <h2>1. Roleplay service only</h2>
+        <p>ROBLOX UBERS provides maps, game information, and fictional ride timetables and reservations for Roblox roleplay. It is not a taxi, rideshare, transport, emergency, or dispatch service. No real-world journey, driver, vehicle, pickup, safety screening, or arrival time is promised or arranged. Do not rely on it for travel or emergencies.</p>
+        <h2>2. Bookings and acceptable use</h2>
+        <p>Bookings reserve in-game roleplay seats only, subject to available capacity on the connected server. Schedules are illustrative and may change or be unavailable. You are responsible for keeping your booking reference and private management key secure. Anyone with that key may view or cancel its booking. Do not submit real names, contact details, passwords, or sensitive personal information as a display name.</p>
+        <h2>3. Data and privacy</h2>
+        <p>Booking details (roleplay name, game, route, stops, departure, seats, status, and creation time) are stored in the operator's local app-data folder or the server's configured data directory so the booking can be managed. They are not shown in public timetable listings. The management key is returned at booking time, its hash is stored on the server, and the browser saves the key in local storage for your itinerary. Clear this site's browser storage to remove the locally saved key. The operator should secure and delete server booking data when no longer needed. This independent project does not provide a user account or promise a particular retention period.</p>
+        <p>Live player position reports are available only from experiences where the owner installed the tracker; reports use anonymous identifiers, expire after 20 seconds, and respect the experience's tracking opt-out. Other live game information is sourced from public Roblox APIs. The website may make requests to Roblox, Cloudflare, GitHub Pages, OpenRouter, or Stripe integrations when enabled; those providers apply their own terms and privacy policies.</p>
+        <h2>4. Availability and third parties</h2>
+        <p>The service is provided "as is" and may be changed, interrupted, or discontinued. Roblox game content, public servers, names, logos, and marks belong to their respective owners. This project is not affiliated with, endorsed by, or sponsored by Roblox Corporation, Brookhaven RP/Voldex, Welcome to Bloxburg, or Coffee Stain Studios.</p>
+        <h2>5. Responsibility</h2>
+        <p>Use the site lawfully and at your own discretion. To the extent permitted by applicable law, the project maintainers disclaim warranties and liability for interruptions, data loss, third-party services, game availability, or consequences of using this fan-made roleplay tool.</p>
+        <h2>Trademarks &amp; copyright</h2>
+        <p>ROBLOX UBERS is a project name and is not claimed here as a registered trademark. "Roblox," game titles, and third-party marks are used only to identify the compatible experiences and remain the property of their respective owners. Original ROBLOX UBERS interface artwork © 2026 GoStudios-Real, except for third-party material credited to its owners. The code is provided under the MIT License in the project repository.</p>
+        <p class="legal-contact">Questions about this independent project? Contact the repository maintainers at <a href="https://github.com/GoStudios-Real/roblox-ubers">GoStudios-Real/roblox-ubers</a>.</p>
+      </article>
+    </section>
   </main>
 
   <footer class="footer">
-    <span>ROBLOX UBERS © 2026 · Fan-made tracking dashboard, not affiliated with Roblox Corporation.</span>
+    <span>ROBLOX UBERS © 2026 · Independent roleplay fan project, not affiliated with Roblox Corporation.</span>
+    <span class="footer-links"><a href="#faq">FAQ</a><a href="#legal">Terms &amp; privacy</a><a href="https://github.com/GoStudios-Real/roblox-ubers">Source</a></span>
     <span id="footStats"></span>
   </footer>
 
