@@ -80,18 +80,63 @@ async function main() {
     for (const mapId of ['brookhaven', 'bloxburg']) {
       await check(`tracking:${mapId}`, async () => {
         const d = await json(`/api/tracking?map=${mapId}`);
-        if (d.vehicles.length < 10) throw new Error(`only ${d.vehicles.length} vehicles`);
+        if (d.vehicles.length !== 0) throw new Error(`expected no fabricated vehicles, got ${d.vehicles.length}`);
         const bad = d.vehicles.filter((v) => !Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isFinite(v.eta));
         if (bad.length) throw new Error('vehicle with bad position/eta');
-        return `${d.vehicles.length} vehicles, ${d.stats.cars} cars / ${d.stats.buses} buses / ${d.stats.taxis} taxis`;
+        return 'empty until a real Roblox tracker reports positions';
       });
     }
 
     await check('roblox-api', async () => {
       const d = await json('/api/roblox/games');
       const g = d.games[0];
-      if (!g.playing || !g.icon) throw new Error('missing live stats or icon');
+      if (!Number.isFinite(g.playing) || !g.icon) throw new Error('missing live stats or icon');
       return `${g.name}: ${g.playing} playing, ${g.visits} visits, icon ok`;
+    });
+
+    await check('roblox-public-servers', async () => {
+      const d = await json('/api/roblox/servers?placeId=4924922222');
+      if (d.placeId !== 4924922222 || !Array.isArray(d.servers) || !Number.isFinite(d.sampledPlayers)) {
+        throw new Error('invalid public-server response');
+      }
+      if (d.servers.length > 100 || d.servers.some((server) =>
+        typeof server.id !== 'string' || !Number.isFinite(server.playing) ||
+        Object.keys(server).some((key) => !['id', 'playing', 'maxPlayers', 'fps', 'ping'].includes(key))
+      )) throw new Error('invalid server fields or page size');
+      if (d.nextCursor) {
+        const next = await json(`/api/roblox/servers?placeId=4924922222&cursor=${encodeURIComponent(d.nextCursor)}`);
+        if (next.placeId !== d.placeId || !Array.isArray(next.servers) || next.servers.length > 100) {
+          throw new Error('next public-server page is invalid');
+        }
+      }
+      return `${d.servers.length} public servers, ${d.sampledPlayers} sampled players`;
+    });
+
+    await check('roblox-public-servers-validates-place', async () => {
+      const res = await fetch(`${BASE}/api/roblox/servers?placeId=1`);
+      if (res.status !== 400) throw new Error(`expected 400, got ${res.status}`);
+      return 'unknown places rejected';
+    });
+
+    await check('pages-cors', async () => {
+      const res = await fetch(`${BASE}/api/roblox/servers?placeId=4924922222`, {
+        headers: { Origin: 'https://gostudios-real.github.io' }
+      });
+      if (res.headers.get('access-control-allow-origin') !== 'https://gostudios-real.github.io') {
+        throw new Error('GitHub Pages origin is not allowed');
+      }
+      const preflight = await fetch(`${BASE}/api/roblox/servers?placeId=4924922222`, {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'https://gostudios-real.github.io',
+          'Access-Control-Request-Method': 'GET',
+          'Access-Control-Request-Headers': 'content-type'
+        }
+      });
+      if (preflight.status !== 204 || !preflight.headers.get('access-control-allow-headers')?.includes('Content-Type')) {
+        throw new Error('browser API preflight was not allowed');
+      }
+      return 'GitHub Pages origin allowed';
     });
 
     await check('ai-chat', async () => {

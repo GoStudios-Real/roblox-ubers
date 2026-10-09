@@ -208,6 +208,13 @@ table.api td:nth-child(2) { font-family: Consolas, monospace; color: var(--blue)
 .plan .desc { color: var(--muted); font-size: 13px; flex: 1; }
 .game { display: flex; flex-direction: column; gap: 8px; }
 .game img { width: 100%; border-radius: 10px; border: 1px solid var(--line); aspect-ratio: 1/1; object-fit: cover; background: #0a1020; }
+.game-link { text-align: center; text-decoration: none; }
+.server-browser { border-top: 1px solid var(--line); padding-top: 10px; }
+.server-browser h4 { margin: 0 0 6px; font-size: 13px; }
+.server-status { font-size: 11px; }
+.server-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow: auto; }
+.server-row { display: flex; gap: 8px; justify-content: space-between; align-items: center; padding: 6px 0; border-top: 1px solid rgba(34, 48, 80, 0.4); color: var(--muted); font-size: 11px; }
+.server-row .btn { padding: 5px 10px; font-size: 11px; }
 .stat-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
 .stat-row b { color: var(--text); }
 .bar { height: 6px; background: var(--panel-2); border-radius: 999px; overflow: hidden; }

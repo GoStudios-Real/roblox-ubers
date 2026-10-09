@@ -9,7 +9,6 @@ const state = {
   vehicles: [],
   players: [],
   playerServers: 0,
-  playerDemo: false,
   filter: 'all',
   search: '',
   selected: null,
@@ -20,8 +19,8 @@ const ICON = { car: '🚗', bus: '🚌', taxi: '🚕' };
 const TYPE_COLOR = { car: '#ef5da8', bus: '#4dd2ff', taxi: '#ffd166' };
 
 async function api(path, opts = {}) {
-  if (window.UBERS_STATIC_MODE) return staticApi(path, opts);
   const apiBase = window.UBERS_API_BASE_URL || '';
+  if (window.UBERS_STATIC_MODE && !apiBase) return staticApi(path, opts);
   const res = await fetch(`${apiBase}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...opts,
@@ -35,7 +34,7 @@ async function api(path, opts = {}) {
 async function staticApi(path, opts = {}) {
   const url = new URL(path, location.href);
   const method = (opts.method || 'GET').toUpperCase();
-  const { maps, vehicles } = window.UBERS_STATIC_DATA;
+  const { maps } = window.UBERS_STATIC_DATA;
   const statsFor = (items) => ({
     total: items.length,
     cars: items.filter((v) => v.type === 'car').length,
@@ -48,17 +47,13 @@ async function staticApi(path, opts = {}) {
 
   if (url.pathname.endsWith('/api/maps') && method === 'GET') return { maps };
   if (url.pathname.endsWith('/api/tracking') && method === 'GET') {
-    const mapId = url.searchParams.get('map');
-    const filtered = vehicles.filter((v) => !mapId || v.map === mapId);
-    return { vehicles: filtered, stats: statsFor(filtered), time: Date.now() };
+    return { vehicles: [], stats: statsFor([]), time: Date.now(), offline: true };
   }
   if (url.pathname.endsWith('/api/players') && method === 'GET') {
-    const mapId = url.searchParams.get('map');
-    const filtered = (window.UBERS_STATIC_DATA.players || []).filter((p) => !mapId || p.map === mapId);
-    return { players: filtered, activeServers: 0, updatedAt: Date.now(), demo: true };
+    return { players: [], activeServers: 0, updatedAt: Date.now(), offline: true };
   }
   if (url.pathname.endsWith('/api/health') && method === 'GET') {
-    return { ok: true, name: 'ROBLOX UBERS', integrations: { openrouter: false, stripe: false, robloxApiKey: false, trackingToken: false }, staticMode: true };
+    return { ok: false, name: 'ROBLOX UBERS', integrations: {}, staticMode: true, offline: true };
   }
   if (url.pathname.endsWith('/api/wifi/hotspots') && method === 'GET') {
     const hotspots = maps.flatMap((map) => map.pois
@@ -67,18 +62,10 @@ async function staticApi(path, opts = {}) {
     return { hotspots, free: true, speed: '100 Mbps', note: 'Demo only: this site does not provide an internet connection.' };
   }
   if (url.pathname.endsWith('/api/wifi/connect') && method === 'POST') {
-    const body = opts.body || {};
-    const code = `DEMO-${crypto.getRandomValues(new Uint8Array(3)).reduce((s, n) => s + n.toString(16).padStart(2, '0'), '').toUpperCase()}`;
-    const record = { code, hotspotId: body.hotspotId || 'wifi-downtown', connectedAt: Date.now(), expiresAt: Date.now() + 30 * 60 * 1000 };
-    localStorage.setItem(`ubers-wifi-${code}`, JSON.stringify(record));
-    return { ok: true, ...record, message: 'Demo access code created; no internet connection is provided.' };
+    throw new Error('WiFi access codes need the connected UBERS server.');
   }
   if (url.pathname.endsWith('/api/wifi/status') && method === 'GET') {
-    const code = url.searchParams.get('code') || '';
-    const raw = localStorage.getItem(`ubers-wifi-${code}`);
-    if (!raw) throw new Error('Unknown demo code');
-    const record = JSON.parse(raw);
-    return { ...record, active: record.expiresAt > Date.now() };
+    throw new Error('WiFi status needs the connected UBERS server.');
   }
   if (url.pathname.endsWith('/api/billing/plans') && method === 'GET') {
     const plans = [
@@ -89,7 +76,10 @@ async function staticApi(path, opts = {}) {
     return { currency: 'USD', plans };
   }
   if (url.pathname.endsWith('/api/roblox/games') && method === 'GET') {
-    return { games: maps.map((map) => ({ placeId: map.placeId, name: map.name, error: 'Live stats require the Windows app and a running server.' })) };
+    return { games: maps.map((map) => ({ placeId: map.placeId, name: map.name, error: 'Connect the Playit HTTPS server to load live Roblox data.' })) };
+  }
+  if (url.pathname.endsWith('/api/roblox/servers') && method === 'GET') {
+    throw new Error('Live servers need the connected Playit HTTPS server.');
   }
   if (url.pathname.endsWith('/api/roblox/key-status') && method === 'GET') {
     return { configured: false, ok: false, message: 'Open the Windows app with a configured server to check an Open Cloud key.' };
@@ -295,7 +285,7 @@ function renderList() {
   const s = state.vehicles.filter((v) => v.map === state.mapId && matches(v));
   const by = (t) => s.filter((v) => v.type === t).length;
   const players = state.players.filter((p) => p.map === state.mapId);
-  const playerLabel = state.playerDemo ? `${players.length} demo players` : `${players.length} live players · ${state.playerServers} servers`;
+  const playerLabel = `${players.length} mapped players · ${state.playerServers} reporting servers`;
   $('#mapStats').textContent = `${by('car')} cars · ${by('bus')} buses · ${by('taxi')} taxis · ${playerLabel} · updated ${new Date().toLocaleTimeString()}`;
   renderPlayers();
 }
@@ -315,12 +305,12 @@ function renderPlayers() {
     $('#playerList').appendChild(row);
   });
   const status = $('#playerStatus');
-  if (state.playerDemo) {
-    status.textContent = 'Demo positions · no live Roblox data';
+  if (state.playerOffline) {
+    status.textContent = 'Live data is not connected. Configure the Playit HTTPS API URL.';
   } else if (players.length) {
     status.textContent = `LIVE · ${state.playerServers} connected game server${state.playerServers === 1 ? '' : 's'} · refreshes every 2s`;
   } else {
-    status.textContent = 'Waiting for a connected Roblox game server.';
+    status.textContent = 'No position reports received. Public Roblox server counts are shown in the Roblox API tab.';
   }
 }
 
@@ -369,6 +359,10 @@ async function pollTracking() {
     drawVehicles();
     $('#pillFleet').textContent = `FLEET ${data.stats.total}`;
     $('#footStats').textContent = `${data.stats.cars} cars · ${data.stats.buses} buses · ${data.stats.taxis} taxis · ${data.stats.external} from Roblox`;
+    if (data.offline) {
+      $('#pillLive').textContent = '● API NOT CONNECTED';
+      $('#pillLive').classList.remove('live');
+    }
   } catch (e) {
     $('#pillLive').textContent = '● OFFLINE';
     $('#pillLive').classList.remove('live');
@@ -381,13 +375,13 @@ async function pollPlayers() {
     const data = await api(`/api/players?map=${state.mapId}`);
     state.players = data.players.map((p) => ({ ...p, map: state.mapId }));
     state.playerServers = data.activeServers || 0;
-    state.playerDemo = Boolean(data.demo);
+    state.playerOffline = Boolean(data.offline);
     drawPlayers();
     renderPlayers();
-    $('#pillPlayers').textContent = state.playerDemo
-      ? '● DEMO PLAYERS'
+    $('#pillPlayers').textContent = state.playerOffline
+      ? '● API NOT CONNECTED'
       : state.players.length ? `● ${state.players.length} PLAYERS` : '● WAITING FOR ROBLOX';
-    $('#pillPlayers').classList.toggle('live', !state.playerDemo && state.players.length > 0);
+    $('#pillPlayers').classList.toggle('live', !state.playerOffline && state.players.length > 0);
   } catch (e) {
     $('#playerStatus').textContent = `Player feed unavailable: ${e.message}`;
     $('#pillPlayers').textContent = '● PLAYER FEED ERROR';
@@ -535,20 +529,90 @@ async function loadGames() {
     games.forEach((g) => {
       const card = document.createElement('div');
       card.className = 'card game';
-      const rating = g.rating != null ? `${g.rating}%` : 'n/a';
       card.innerHTML = `
-        <img src="${g.icon || ''}" alt="${g.name || 'game'}" loading="lazy" onerror="this.style.display='none'">
-        <h3>${g.name || `Place ${g.placeId}`}</h3>
-        <div class="stat-row"><span>Playing now</span><b>${fmt(g.playing)}</b></div>
-        <div class="stat-row"><span>Visits</span><b>${fmt(g.visits)}</b></div>
-        <div class="stat-row"><span>Favorites</span><b>${fmt(g.favorites)}</b></div>
-        <div class="stat-row"><span>Approval</span><b>${rating}</b></div>
-        <div class="bar"><span style="width:${g.rating || 0}%"></span></div>
-        <a class="btn ghost" style="text-align:center;text-decoration:none" href="https://www.roblox.com/games/${g.placeId}" target="_blank" rel="noopener">Open on Roblox</a>
-        ${g.error ? `<span class="muted">${g.error}</span>` : ''}`;
+        <img loading="lazy">
+        <h3></h3>
+        <div class="stat-row"><span>Playing now</span><b data-stat="playing"></b></div>
+        <div class="stat-row"><span>Visits</span><b data-stat="visits"></b></div>
+        <div class="stat-row"><span>Favorites</span><b data-stat="favorites"></b></div>
+        <div class="stat-row"><span>Approval</span><b data-stat="rating"></b></div>
+        <div class="bar"><span></span></div>
+        <a class="btn ghost game-link" target="_blank" rel="noopener">Open on Roblox</a>
+        <p class="game-error muted" hidden></p>
+        <section class="server-browser">
+          <h4>Live public servers</h4>
+          <p class="server-status muted">Loading official Roblox server data…</p>
+          <div class="server-list"></div>
+          <button class="btn ghost server-more" type="button" hidden>Load next 100 servers</button>
+        </section>`;
+      const title = g.name || `Place ${g.placeId}`;
+      const image = card.querySelector('img');
+      image.src = g.icon || '';
+      image.alt = title;
+      image.addEventListener('error', () => { image.hidden = true; }, { once: true });
+      card.querySelector('h3').textContent = title;
+      card.querySelector('[data-stat="playing"]').textContent = fmt(g.playing);
+      card.querySelector('[data-stat="visits"]').textContent = fmt(g.visits);
+      card.querySelector('[data-stat="favorites"]').textContent = fmt(g.favorites);
+      card.querySelector('[data-stat="rating"]').textContent = g.rating == null ? 'n/a' : `${g.rating}%`;
+      card.querySelector('.bar > span').style.width = `${Math.max(0, Math.min(100, Number(g.rating) || 0))}%`;
+      card.querySelector('.game-link').href = `https://www.roblox.com/games/${encodeURIComponent(g.placeId)}`;
+      if (g.error) {
+        const error = card.querySelector('.game-error');
+        error.textContent = g.error;
+        error.hidden = false;
+      }
+      const status = card.querySelector('.server-status');
+      const list = card.querySelector('.server-list');
+      const more = card.querySelector('.server-more');
+      const pageState = { cursor: null, count: 0, players: 0 };
+      const load = () => loadPublicServers(g.placeId, status, list, more, pageState);
+      more.addEventListener('click', load);
+      load();
       grid.appendChild(card);
     });
   } catch (e) { toast(e.message); }
+}
+
+async function loadPublicServers(placeId, status, list, more, pageState) {
+  more.disabled = true;
+  status.textContent = pageState.cursor ? 'Loading next page from Roblox…' : 'Loading official Roblox server data…';
+  try {
+    const query = new URLSearchParams({ placeId });
+    if (pageState.cursor) query.set('cursor', pageState.cursor);
+    const data = await api(`/api/roblox/servers?${query}`);
+    pageState.count += data.sampledServers;
+    pageState.players += data.sampledPlayers;
+    pageState.cursor = data.nextCursor;
+    status.textContent = `Live · ${fmt(pageState.players)} players across ${fmt(pageState.count)} loaded public servers · updated ${new Date(data.updatedAt).toLocaleTimeString()}`;
+    if (!pageState.count) {
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'Roblox currently returned no public servers.';
+      list.appendChild(empty);
+    }
+    data.servers.forEach((server, index) => {
+      const row = document.createElement('div');
+      row.className = 'server-row';
+      const details = document.createElement('span');
+      details.textContent = `Server ${pageState.count - data.sampledServers + index + 1} · ${server.playing}/${server.maxPlayers ?? '?'} players`;
+      if (server.ping != null) details.textContent += ` · ${Math.round(server.ping)} ms`;
+      const join = document.createElement('a');
+      join.className = 'btn ghost';
+      join.href = `https://www.roblox.com/games/${encodeURIComponent(placeId)}?gameInstanceId=${encodeURIComponent(server.id)}`;
+      join.target = '_blank';
+      join.rel = 'noopener';
+      join.textContent = 'Join';
+      row.append(details, join);
+      list.appendChild(row);
+    });
+    more.hidden = !pageState.cursor;
+  } catch (error) {
+    status.textContent = error.message;
+    more.hidden = !pageState.cursor;
+  } finally {
+    more.disabled = false;
+  }
 }
 
 $('#keyCheckBtn').addEventListener('click', async () => {
@@ -571,13 +635,10 @@ function activateView(name, wifiPreselect) {
 }
 
 async function boot() {
-  if (window.UBERS_STATIC_MODE) {
-    $('.brand-sub').textContent = 'ROBLOX · STATIC DEMO';
-    $('#view-wifi .hero p').textContent = 'Explore demo hotspots and create a local demo code. This static site does not provide an internet connection.';
-    $('#view-premium .hero p').textContent = 'Premium plans are shown for preview. Stripe checkout requires the Windows app and a configured server.';
-    $('#view-ai .chat-head h3').textContent = 'AI Support (Windows app required)';
-    $('#view-integrate .hero p').textContent = 'GitHub Pages cannot receive Roblox game callbacks. Live player positions need your own publicly reachable server and the Roblox tracker installed in a game you own.';
-    addMsg('This GitHub Pages site is a static demo. AI chat needs the Windows app and a configured OpenRouter API key.', 'err');
+  if (window.UBERS_STATIC_MODE && !window.UBERS_API_BASE_URL) {
+    $('.brand-sub').textContent = 'ROBLOX · LIVE DATA NOT CONNECTED';
+    $('#view-integrate .hero p').textContent = 'Configure the Playit HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data.';
+    addMsg('Live Roblox data is not connected yet. Configure the Playit HTTPS tunnel using the setup instructions below.', 'err');
   }
   try {
     const { maps } = await api('/api/maps');
@@ -588,13 +649,14 @@ async function boot() {
   await pollTracking();
   setInterval(pollTracking, 2000);
 
-  if (window.UBERS_STATIC_MODE) {
-    $('#pillLive').textContent = '● DEMO · STATIC';
+  if (window.UBERS_STATIC_MODE && !window.UBERS_API_BASE_URL) {
+    $('#pillLive').textContent = '● API NOT CONNECTED';
     $('#pillLive').classList.remove('live');
   } else {
     api('/api/health').then((d) => {
       const on = Object.values(d.integrations).filter(Boolean).length;
-      $('#pillLive').textContent = `● LIVE · ${on}/4 APIs`;
+      $('#pillLive').textContent = d.offline ? '● API NOT CONNECTED' : `● LIVE · ${on} integrations`;
+      if (d.offline) $('#pillLive').classList.remove('live');
     }).catch(() => {});
   }
 
