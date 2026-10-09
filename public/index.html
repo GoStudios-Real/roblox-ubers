@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ROBLOX UBERS - Live Car, Bus & Taxi Tracking</title>
+  <meta name="description" content="Track cars, buses and taxis live across Brookhaven RP and Welcome to Bloxburg. Free WiFi, AI support and Stripe payments." />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚕</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">UBERS</span>
+      <span class="brand-sub">ROBLOX · LIVE FLEET</span>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-view="map">Live Map</button>
+      <button class="tab" data-view="wifi">Free WiFi</button>
+      <button class="tab" data-view="ai">AI Support</button>
+      <button class="tab" data-view="premium">Premium</button>
+      <button class="tab" data-view="roblox">Roblox API</button>
+      <button class="tab" data-view="integrate">Integrate</button>
+    </nav>
+    <div class="status" id="statusPills">
+      <span class="pill" id="pillFleet">FLEET ...</span>
+      <span class="pill live" id="pillLive">● LIVE</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ LIVE MAP ============ -->
+    <section class="view active" id="view-map">
+      <div class="map-toolbar">
+        <div class="seg" id="mapSwitch">
+          <button class="seg-btn active" data-map="brookhaven">Brookhaven RP</button>
+          <button class="seg-btn" data-map="bloxburg">Welcome to Bloxburg</button>
+        </div>
+        <div class="filters" id="filters">
+          <button class="chip active" data-type="all">All</button>
+          <button class="chip" data-type="car">🚗 Cars</button>
+          <button class="chip" data-type="bus">🚌 Buses</button>
+          <button class="chip" data-type="taxi">🚕 Taxis</button>
+          <button class="chip" data-type="wifi">📶 WiFi</button>
+        </div>
+        <label class="search"><input id="vehicleSearch" type="search" placeholder="Search plate, driver, route..." /></label>
+        <div class="map-stats" id="mapStats"></div>
+      </div>
+
+      <div class="map-layout">
+        <div class="map-card">
+          <svg id="mapSvg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Roblox tracking map"></svg>
+          <div class="map-legend" id="mapLegend"></div>
+        </div>
+        <aside class="fleet-panel">
+          <div class="panel-head">
+            <h3>Active vehicles</h3>
+            <span class="count" id="fleetCount">0</span>
+          </div>
+          <div class="vehicle-list" id="vehicleList"></div>
+          <div class="selected" id="selectedCard">
+            <p class="muted">Tap a vehicle on the map or in the list to see details.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============ WIFI ============ -->
+    <section class="view" id="view-wifi">
+      <div class="hero">
+        <h1>Free WiFi, everywhere on the map</h1>
+        <p>Every ROBLOX UBERS hotspot is free. Tap Connect to grab a 30-minute access code, then show it to your driver.</p>
+      </div>
+      <div class="grid" id="wifiGrid"></div>
+      <div class="card" id="wifiTicket" hidden>
+        <h3>Your access code</h3>
+        <div class="code" id="wifiCode">----</div>
+        <p class="muted" id="wifiMeta"></p>
+        <label>Check a code
+          <input id="wifiCheckInput" type="text" placeholder="UBERS-XXXXXX" />
+        </label>
+        <button class="btn ghost" id="wifiCheckBtn">Check status</button>
+        <p class="muted" id="wifiCheckResult"></p>
+      </div>
+    </section>
+
+    <!-- ============ AI SUPPORT ============ -->
+    <section class="view" id="view-ai">
+      <div class="chat-wrap">
+        <div class="chat-head">
+          <h3>UBERS AI Support</h3>
+          <span class="pill" id="aiModel">powered by OpenRouter</span>
+        </div>
+        <div class="chat-log" id="chatLog">
+          <div class="msg bot">Hi! I'm the ROBLOX UBERS assistant. Ask me about tracking, WiFi hotspots, premium plans or the Roblox API.</div>
+        </div>
+        <form class="chat-form" id="chatForm">
+          <input id="chatInput" type="text" autocomplete="off" placeholder="How do I track the bus in Brookhaven?" />
+          <button class="btn" type="submit">Send</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3>Quick answers</h3>
+        <div class="quick" id="quickAsks">
+          <button class="chip">Where is the closest free WiFi?</button>
+          <button class="chip">How do I track a taxi?</button>
+          <button class="chip">What is UBERS Premium?</button>
+          <button class="chip">How do I connect my Roblox game?</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PREMIUM ============ -->
+    <section class="view" id="view-premium">
+      <div class="hero">
+        <h1>UBERS Premium</h1>
+        <p>Secure checkout powered by Stripe. Cards, Apple Pay and Google Pay accepted.</p>
+        <div id="checkoutBanner" class="banner" hidden></div>
+      </div>
+      <div class="grid plans" id="planGrid"></div>
+      <div class="card">
+        <h3>What you get</h3>
+        <ul class="ticks">
+          <li>Real-time car / bus / taxi tracking on both maps</li>
+          <li>Free WiFi access codes at every hotspot</li>
+          <li>AI support that knows your fleet</li>
+          <li>Roblox Open Cloud integration and vehicle webhooks</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ ROBLOX API ============ -->
+    <section class="view" id="view-roblox">
+      <div class="hero">
+        <h1>Roblox API tracker</h1>
+        <p>Live stats pulled from the official Roblox Games and Thumbnails APIs - no scraping.</p>
+      </div>
+      <div class="grid" id="gameGrid"></div>
+      <div class="card">
+        <h3>Open Cloud API key</h3>
+        <p class="muted">Add <code>ROBLOX_API_KEY</code> to your <code>.env</code> to unlock server-side tracking for your own place.</p>
+        <button class="btn" id="keyCheckBtn">Check key status</button>
+        <p class="muted" id="keyCheckResult"></p>
+      </div>
+    </section>
+
+    <!-- ============ INTEGRATE ============ -->
+    <section class="view" id="view-integrate">
+      <div class="hero">
+        <h1>Put UBERS tracking in your Roblox game</h1>
+        <p>Drop the tracker script into ServerScriptService, set the token, and your vehicles appear on this site live.</p>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <h3>1. Server</h3>
+          <pre><code>npm install
+cp .env.example .env   # add your keys
+npm start              # http://localhost:3000</code></pre>
+        </div>
+        <div class="card">
+          <h3>2. Roblox Studio</h3>
+          <p class="muted">Copy <code>roblox/UBERS_VehicleTracker.server.lua</code> into <b>ServerScriptService</b> and set <code>TRACKING_TOKEN</code> to the same value as your <code>.env</code>.</p>
+        </div>
+        <div class="card">
+          <h3>3. Your token</h3>
+          <code class="token" id="tokenHint">hidden</code>
+          <p class="muted">The token never leaves the server - only the health of the link is shown here.</p>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Endpoints</h3>
+        <table class="api">
+          <tr><td>GET</td><td>/api/tracking?map=brookhaven</td><td>Live vehicle positions</td></tr>
+          <tr><td>POST</td><td>/api/tracking/ping</td><td>Roblox place reports vehicles (x-ubers-token)</td></tr>
+          <tr><td>GET</td><td>/api/roblox/games?placeIds=...</td><td>Roblox game stats + icons</td></tr>
+          <tr><td>POST</td><td>/api/ai/chat</td><td>OpenRouter AI support</td></tr>
+          <tr><td>POST</td><td>/api/billing/checkout</td><td>Stripe checkout session</td></tr>
+          <tr><td>POST</td><td>/api/wifi/connect</td><td>Free WiFi access code</td></tr>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>ROBLOX UBERS © 2026 · Fan-made tracking dashboard, not affiliated with Roblox Corporation.</span>
+    <span id="footStats"></span>
+  </footer>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>

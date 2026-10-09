@@ -1,0 +1,24 @@
+{
+  "name": "roblox-ubers",
+  "version": "1.0.0",
+  "description": "ROBLOX UBERS - live car/bus/taxi tracking, AI support, Stripe, free WiFi",
+  "main": "server.js",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^18.0.6",
+    "express": "^5.2.1",
+    "stripe": "^23.0.0"
+  }
+}
