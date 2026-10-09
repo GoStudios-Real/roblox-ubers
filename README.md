@@ -42,6 +42,8 @@ The GitHub Pages site at <https://gostudios-real.github.io/roblox-ubers/> contai
 
 To build the Windows executable locally, run `npm ci` and `npm run package:exe`. The versioned `dist/ROBLOX-UBERS-v1.4.0.exe` starts the full server and opens it in your browser; keep its console window open while using the app. Configure integrations in a `.env` file beside the executable. Publishing a `v*` tag builds the executable and attaches it to a GitHub Release.
 
+The Integrate tab on GitHub Pages offers Notepad-friendly `.txt` downloads of the original town starter, NPC dispatcher, and vehicle tracker scripts. Rename a downloaded `.txt` file to `.lua` before installing it in Roblox Studio, and only install scripts in an experience you own or are authorized to edit.
+
 ### Connect GitHub Pages through Cloudflare Tunnel
 
 1. Install Cloudflare Tunnel (`winget install --id Cloudflare.cloudflared`) and start the app/server on the Windows computer that will stay online.
