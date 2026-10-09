@@ -46,6 +46,7 @@ code, pre, .token { font-family: "Cascadia Code", Consolas, monospace; }
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .brand-sub { font-size: 10px; letter-spacing: 3px; color: var(--muted); margin-top: 4px; }
+.sound-toggle { white-space: nowrap; }
 .tabs { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
 .tab {
   background: transparent; border: 1px solid transparent; color: var(--muted);
@@ -210,9 +211,13 @@ table.api td:nth-child(2) { font-family: Consolas, monospace; color: var(--blue)
 .plan { display: flex; flex-direction: column; gap: 8px; }
 .plan .price { font-size: 30px; font-weight: 900; color: var(--accent); }
 .plan .desc { color: var(--muted); font-size: 13px; flex: 1; }
+.plan-payment-type { font-size: 11px; }
 .game { display: flex; flex-direction: column; gap: 8px; }
 .game img { width: 100%; border-radius: 10px; border: 1px solid var(--line); aspect-ratio: 1/1; object-fit: cover; background: #0a1020; }
 .game-link { text-align: center; text-decoration: none; }
+.roblox-launch-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.roblox-launch-links > .btn { flex: 1 1 150px; text-align: center; text-decoration: none; }
+.roblox-launch-hint { display: block; font-size: 11px; line-height: 1.45; }
 .server-browser { border-top: 1px solid var(--line); padding-top: 10px; }
 .server-browser h4 { margin: 0 0 6px; font-size: 13px; }
 .server-status { font-size: 11px; }
@@ -247,6 +252,29 @@ table.api td:nth-child(2) { font-family: Consolas, monospace; color: var(--blue)
 .ride-banner p { margin: 0; color: #cfdbef; line-height: 1.6; max-width: 470px; }
 .booking-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .8fr); gap: 16px; align-items: start; }
 .booking-form, .lookup-form { display: flex; flex-direction: column; gap: 16px; }
+.profile-lookup-card { margin-top: 14px; }
+.profile-lookup-card h3 { margin: 0 0 6px; }
+.profile-lookup-card > p { font-size: 12px; line-height: 1.5; }
+.profile-form, .input-action { display: flex; align-items: center; gap: 8px; }
+.profile-form { margin-top: 12px; }
+.profile-form input, .input-action input {
+  min-width: 0; flex: 1; background: var(--panel-2); border: 1px solid var(--line);
+  color: var(--text); padding: 10px 12px; border-radius: 9px; outline: none;
+}
+.profile-form input:focus, .input-action input:focus { border-color: var(--accent); }
+.profile-result:empty { display: none; }
+.profile-result:not(:empty) { margin-top: 10px; }
+.roblox-profile {
+  display: flex; align-items: center; gap: 13px; padding: 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2);
+}
+.roblox-profile > img { width: 64px; height: 64px; border-radius: 14px; object-fit: cover; background: var(--panel); }
+.roblox-profile-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.roblox-profile-info b { color: var(--text); }
+.roblox-profile-info span, .roblox-profile-info p { color: var(--muted); font-size: 12px; }
+.roblox-profile-info p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.roblox-profile-info a, .booking-card > a:not(.btn) { color: var(--blue); font-size: 12px; }
+.roblox-profile > .btn { margin-left: auto; white-space: nowrap; }
 .booking-heading { padding: 0 0 14px; }
 .booking-heading h2, .lookup-form h2 { margin: 0 0 4px; font-size: 20px; }
 .booking-heading p { margin: 0; font-size: 12px; }
@@ -282,6 +310,7 @@ table.api td:nth-child(2) { font-family: Consolas, monospace; color: var(--blue)
 .saved-bookings > p { font-size: 12px; line-height: 1.5; }
 .saved-booking { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
 .saved-booking b { font-size: 12px; }
+.saved-booking small { color: var(--muted); font-size: 10px; text-align: right; }
 .saved-booking .btn { padding: 6px 10px; font-size: 11px; white-space: nowrap; }
 .booking-details { margin-top: 16px; }
 .booking-card { display: flex; flex-direction: column; gap: 8px; }
@@ -289,6 +318,18 @@ table.api td:nth-child(2) { font-family: Consolas, monospace; color: var(--blue)
 .booking-card p { margin: 0; color: var(--muted); font-size: 13px; }
 .booking-card .booking-status { color: var(--green); font-weight: 800; }
 .booking-card .cancelled { color: var(--red); }
+.booking-card .booking-departure { color: var(--text); font-weight: 700; }
+.ride-tracking { margin-top: 8px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.ride-tracking h4 { margin: 0 0 5px; font-size: 14px; }
+.booking-card .ride-tracking-status { color: var(--accent); font-weight: 800; }
+.ride-progress { height: 7px; margin: 18px 8px 12px; overflow: hidden; border-radius: 999px; background: var(--line); }
+.ride-progress-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width .35s ease; }
+.ride-stages { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; }
+.ride-stages li { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--muted); text-align: center; font-size: 10px; line-height: 1.25; }
+.ride-stages li::before { width: 11px; height: 11px; border: 2px solid var(--muted); border-radius: 50%; background: var(--panel-2); content: ""; }
+.ride-stages li.complete::before, .ride-stages li.current::before { border-color: var(--green); background: var(--green); }
+.ride-stages li.current { color: var(--text); font-weight: 800; }
+.ride-tracking-note { display: block; margin-top: 12px; font-size: 11px; line-height: 1.45; }
 .faq-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .faq-list details { padding: 16px; }
 .faq-list summary { cursor: pointer; font-weight: 800; }
@@ -304,6 +345,10 @@ table.api td:nth-child(2) { font-family: Consolas, monospace; color: var(--blue)
   .ride-banner-copy { padding: 27px 22px; }
 }
 @media (max-width: 560px) {
+  .ride-tracking { padding: 12px 8px; }
+  .ride-stages { gap: 2px; }
+  .ride-stages li { font-size: 8px; }
+  .ride-stages li::before { width: 9px; height: 9px; }
   .form-grid { grid-template-columns: 1fr; }
   .form-wide { grid-column: auto; }
   .ride-banner { min-height: 230px; }
@@ -311,6 +356,10 @@ table.api td:nth-child(2) { font-family: Consolas, monospace; color: var(--blue)
   .ride-banner::after { background: linear-gradient(90deg, rgba(7,10,18,.82), rgba(7,10,18,.45)); }
   .booking-heading { align-items: flex-start; gap: 8px; }
   .footer-links { width: 100%; }
+  .input-action, .profile-form { align-items: stretch; flex-direction: column; }
+  .profile-form .btn, .input-action .btn { width: 100%; }
+  .roblox-profile { align-items: flex-start; flex-wrap: wrap; }
+  .roblox-profile > .btn { width: 100%; margin-left: 0; }
 }
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);

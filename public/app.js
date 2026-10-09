@@ -18,9 +18,29 @@ const state = {
 
 const ICON = { car: '🚗', bus: '🚌', taxi: '🚕' };
 const TYPE_COLOR = { car: '#ef5da8', bus: '#4dd2ff', taxi: '#ffd166' };
+const apiOverrideStorageKey = 'roblox-ubers-api-base-url';
+const soundPreferenceKey = 'roblox-ubers-sound-enabled';
+let soundEnabled = false;
+let soundContext = null;
+try {
+  soundEnabled = localStorage.getItem(soundPreferenceKey) === 'true';
+} catch {
+  soundEnabled = false;
+}
+
+function activeApiBase() {
+  try {
+    if (localStorage.getItem(apiOverrideStorageKey) !== null) {
+      return localStorage.getItem(apiOverrideStorageKey);
+    }
+    return window.UBERS_API_BASE_URL || '';
+  } catch {
+    return window.UBERS_API_BASE_URL || '';
+  }
+}
 
 async function api(path, opts = {}) {
-  const apiBase = window.UBERS_API_BASE_URL || '';
+  const apiBase = activeApiBase();
   if (window.UBERS_STATIC_MODE && !apiBase) return staticApi(path, opts);
   const tunnelHeaders = apiBase.includes('.trycloudflare.com') ? { 'cf-skip-browser-warning': '1' } : {};
   const res = await fetch(`${apiBase}${path}`, {
@@ -29,7 +49,11 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const error = new Error(data.error || `Request failed (${res.status})`);
+    error.setupRequired = Boolean(data.setupRequired);
+    throw error;
+  }
   return data;
 }
 
@@ -78,10 +102,17 @@ async function staticApi(path, opts = {}) {
       { id: 'driver', name: 'UBERS Premium - Driver', desc: 'List your Roblox vehicle, AI dispatch, payouts-ready', amount: 999, display: '$9.99' },
       { id: 'fleet', name: 'UBERS Fleet', desc: 'Up to 50 vehicles, webhooks, API access', amount: 2999, display: '$29.99' }
     ];
-    return { currency: 'USD', plans };
+    return { currency: 'USD', plans, checkoutEnabled: false, checkoutMode: 'payment' };
   }
   if (url.pathname.endsWith('/api/roblox/games') && method === 'GET') {
-    return { games: maps.map((map) => ({ placeId: map.placeId, name: map.name, error: 'Connect the Playit HTTPS server to load live Roblox data.' })) };
+    const games = maps
+      .filter((map) => Number.isSafeInteger(map.placeId) && map.ownerManaged)
+      .map((map) => ({ placeId: map.placeId, name: map.name, error: 'Connect the public HTTPS server to load live Roblox data.' }));
+    return {
+      games,
+      setupRequired: games.length === 0,
+      message: games.length === 0 ? 'Configure your own Roblox place IDs in the Node server .env to enable game stats and joins.' : undefined
+    };
   }
   if (url.pathname.endsWith('/api/roblox/servers') && method === 'GET') {
     throw new Error('Live servers need the connected Playit HTTPS server.');
@@ -98,7 +129,60 @@ function toast(msg) {
   t.hidden = false;
   clearTimeout(t._h);
   t._h = setTimeout(() => (t.hidden = true), 3500);
+  if (/unavailable|error|failed|invalid|not connected|could not|need the connected/i.test(msg)) {
+    playSound('error');
+  } else {
+    playSound('notice');
+  }
 }
+
+function playSound(kind = 'tap') {
+  if (!soundEnabled) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  try {
+    soundContext ||= new AudioContextClass();
+    if (soundContext.state === 'suspended') soundContext.resume().catch(() => {});
+    const notes = kind === 'notice' ? [660, 880] : kind === 'error' ? [330, 247] : [520];
+    const start = soundContext.currentTime;
+    notes.forEach((frequency, index) => {
+      const oscillator = soundContext.createOscillator();
+      const gain = soundContext.createGain();
+      const onset = start + index * 0.11;
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, onset);
+      gain.gain.setValueAtTime(0.0001, onset);
+      gain.gain.exponentialRampToValueAtTime(0.055, onset + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, onset + 0.15);
+      oscillator.connect(gain);
+      gain.connect(soundContext.destination);
+      oscillator.start(onset);
+      oscillator.stop(onset + 0.16);
+    });
+  } catch {
+    // Sound is optional; unavailable browser audio must not interrupt the app.
+  }
+}
+
+function updateSoundToggle() {
+  const toggle = $('#soundToggle');
+  if (!toggle) return;
+  toggle.textContent = soundEnabled ? 'Sound on' : 'Sound off';
+  toggle.setAttribute('aria-pressed', String(soundEnabled));
+  toggle.setAttribute('aria-label', `Turn sound effects ${soundEnabled ? 'off' : 'on'}`);
+}
+
+$('#soundToggle')?.addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  try {
+    localStorage.setItem(soundPreferenceKey, String(soundEnabled));
+  } catch {
+    toast('Sound preference could not be saved in this browser.');
+  }
+  updateSoundToggle();
+  if (soundEnabled) playSound('notice');
+});
+updateSoundToggle();
 
 function fmt(n) {
   if (n == null) return '-';
@@ -111,6 +195,7 @@ function fmt(n) {
 /* ---------------- views ---------------- */
 $$('#tabs .tab').forEach((btn) =>
   btn.addEventListener('click', () => {
+    playSound('tap');
     location.hash = btn.dataset.view;
     activateView(btn.dataset.view);
     if (btn.dataset.view === 'ai') $('#chatInput').focus();
@@ -118,16 +203,65 @@ $$('#tabs .tab').forEach((btn) =>
 );
 
 $$('[data-navigate]').forEach((btn) =>
-  btn.addEventListener('click', () => activateView(btn.dataset.navigate))
+  btn.addEventListener('click', () => {
+    playSound('tap');
+    activateView(btn.dataset.navigate);
+  })
 );
 
 /* ---------------- roleplay bookings ---------------- */
 const bookingStorageKey = 'roblox-ubers-bookings';
 let timetableRequest = 0;
+let savedBookingRefreshTimer = null;
+let activeBooking = null;
+let bookingDetailsRequest = 0;
 
 function localDateKey(value) {
   const date = new Date(value);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function localTime(value) {
+  return new Date(value).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
+function localDateTime(value) {
+  const date = new Date(value);
+  return `${date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  })} · ${localTime(value)}`;
+}
+
+function addRobloxLaunchLinks(container, placeId, serverId = '') {
+  const safePlaceId = String(placeId);
+  if (!/^\d{1,20}$/.test(safePlaceId)) return;
+  const query = new URLSearchParams({ placeId: safePlaceId });
+  if (serverId) query.set('gameInstanceId', String(serverId));
+
+  const appLink = document.createElement('a');
+  appLink.className = 'btn';
+  appLink.href = `roblox://experiences/start?${query}`;
+  appLink.textContent = 'Launch Roblox app';
+  appLink.setAttribute('aria-label', 'Launch this experience in the Roblox app');
+
+  const webLink = document.createElement('a');
+  webLink.className = 'btn ghost';
+  webLink.href = `https://www.roblox.com/games/${encodeURIComponent(safePlaceId)}${serverId ? `?gameInstanceId=${encodeURIComponent(serverId)}` : ''}`;
+  webLink.target = '_blank';
+  webLink.rel = 'noopener noreferrer';
+  webLink.textContent = 'Open Roblox game page';
+
+  const hint = document.createElement('small');
+  hint.className = 'muted roblox-launch-hint';
+  hint.textContent = 'Opens your configured original test place. UBERS NPC drivers only run in experiences where you installed the server script.';
+  container.append(appLink, webLink, hint);
 }
 
 function configureBookingForm() {
@@ -204,9 +338,126 @@ function renderSavedBookings() {
     open.className = 'btn ghost';
     open.textContent = 'View';
     open.addEventListener('click', () => lookupBooking(entry.reference, entry.key));
-    row.append(reference, open);
+    const status = document.createElement('small');
+    status.className = 'muted saved-ride-status';
+    status.textContent = 'Checking…';
+    row.append(reference, status, open);
     list.appendChild(row);
   });
+  refreshSavedBookingStatuses();
+}
+
+function dispatchStatusText(status) {
+  return ({
+    scheduled: 'Scheduled',
+    profile_required: 'Add a Roblox profile to request an NPC driver',
+    waiting: 'Waiting for an owner-run game server',
+    claimed: 'NPC driver assigned',
+    enroute: 'NPC vehicle on the way',
+    arrived: 'NPC driver at pickup',
+    picked_up: 'Ride in progress',
+    completed: 'Ride completed',
+    failed: 'Dispatch failed',
+    cancelled: 'Cancelled'
+  })[status] || 'Roleplay booking';
+}
+
+async function refreshSavedBookingStatuses() {
+  const rows = $$('.saved-booking');
+  const entries = savedBookings();
+  await Promise.all(rows.map(async (row, index) => {
+    const status = $('.saved-ride-status', row);
+    const entry = entries[index];
+    if (!status || !entry) return;
+    try {
+      const result = await api(`/api/bookings/${encodeURIComponent(entry.reference)}/lookup`, {
+        method: 'POST',
+        body: { manageKey: entry.key }
+      });
+      status.textContent = `${dispatchStatusText(result.booking.dispatchStatus)} · ${result.booking.mapName} · ${localTime(result.booking.departureAt)}`;
+    } catch {
+      status.textContent = 'Unavailable';
+    }
+  }));
+}
+
+function renderRobloxProfile(profile, container, addToBooking = false) {
+  container.replaceChildren();
+  const card = document.createElement('div');
+  card.className = 'roblox-profile';
+  if (typeof profile.avatarUrl === 'string' && profile.avatarUrl.startsWith('https://tr.rbxcdn.com/')) {
+    const avatar = document.createElement('img');
+    avatar.src = profile.avatarUrl;
+    avatar.alt = '';
+    avatar.loading = 'lazy';
+    avatar.referrerPolicy = 'no-referrer';
+    card.appendChild(avatar);
+  }
+  const text = document.createElement('div');
+  text.className = 'roblox-profile-info';
+  const name = document.createElement('b');
+  name.textContent = profile.displayName;
+  const username = document.createElement('span');
+  username.textContent = `@${profile.username}`;
+  const profileLink = document.createElement('a');
+  profileLink.href = profile.profileUrl;
+  profileLink.target = '_blank';
+  profileLink.rel = 'noopener noreferrer';
+  profileLink.textContent = 'Open Roblox profile';
+  text.append(name, username, profileLink);
+  if (profile.description) {
+    const description = document.createElement('p');
+    description.textContent = profile.description;
+    text.appendChild(description);
+  }
+  if (profile.isBanned) {
+    const banned = document.createElement('span');
+    banned.className = 'field-hint';
+    banned.textContent = 'Roblox reports this account as banned.';
+    text.appendChild(banned);
+  }
+  card.appendChild(text);
+  if (addToBooking) {
+    const use = document.createElement('button');
+    use.type = 'button';
+    use.className = 'btn ghost';
+    use.textContent = 'Use for ride';
+    use.addEventListener('click', () => {
+      $('#bookingRobloxUsername').value = profile.username;
+      if (!$('#rideName').value.trim()) $('#rideName').value = profile.displayName;
+      $('#bookingProfileResult').replaceChildren();
+      const message = document.createElement('p');
+      message.className = 'field-hint';
+      message.textContent = `Selected @${profile.username}. Roblox will be checked again when you book. This does not verify account ownership.`;
+      $('#bookingProfileResult').appendChild(message);
+      activateView('book');
+    });
+    card.appendChild(use);
+  }
+  container.appendChild(card);
+}
+
+async function lookupRobloxProfile(username, target, useForBooking = false) {
+  target.replaceChildren();
+  const pending = document.createElement('p');
+  pending.className = 'muted';
+  pending.textContent = 'Looking up public Roblox profile…';
+  target.appendChild(pending);
+  try {
+    const result = await api('/api/roblox/profile', {
+      method: 'POST',
+      body: { username }
+    });
+    renderRobloxProfile(result.profile, target, useForBooking);
+    return result.profile;
+  } catch (error) {
+    target.replaceChildren();
+    const message = document.createElement('p');
+    message.className = 'booking-result error';
+    message.textContent = error.message;
+    target.appendChild(message);
+    return null;
+  }
 }
 
 function setBookingResult(title, message, isError = false, manageKey = '') {
@@ -277,12 +528,11 @@ async function loadTimetable() {
     heading.textContent = `${data.route.name} · ${slots.length} departures`;
     preview.appendChild(heading);
     slots.forEach((slot) => {
-      const time = new Date(slot.departureAt);
-      const label = `${time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${slot.seatsAvailable} seats`;
+      const label = `${localTime(slot.departureAt)} · ${slot.seatsAvailable} seats`;
       departureSelect.add(new Option(label, slot.departureAt));
       const item = document.createElement('p');
       item.className = 'slot-note';
-      item.textContent = `${time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} — ${slot.seatsAvailable} seat${slot.seatsAvailable === 1 ? '' : 's'} available`;
+      item.textContent = `${localTime(slot.departureAt)} — ${slot.seatsAvailable} seat${slot.seatsAvailable === 1 ? '' : 's'} available`;
       preview.appendChild(item);
     });
     list.appendChild(preview);
@@ -308,11 +558,112 @@ function renderBookingCard(booking, manageKey) {
   const details = document.createElement('p');
   details.textContent = `${booking.routeName} · ${booking.pickupName} → ${booking.dropoffName}`;
   const departure = document.createElement('p');
-  departure.textContent = `${new Date(booking.departureAt).toLocaleString()} · ${booking.seats} seat${booking.seats === 1 ? '' : 's'} · ${booking.riderName}`;
+  departure.className = 'booking-departure';
+  departure.textContent = `${localDateTime(booking.departureAt)} · ${booking.seats} seat${booking.seats === 1 ? '' : 's'} · ${booking.riderName}`;
   const status = document.createElement('p');
   status.className = `booking-status${booking.status === 'cancelled' ? ' cancelled' : ''}`;
   status.textContent = `Status: ${booking.status}`;
-  card.append(title, details, departure, status);
+  const dispatch = document.createElement('p');
+  dispatch.textContent = `Driver: ${dispatchStatusText(booking.dispatchStatus)}`;
+  card.append(title, details, departure, status, dispatch);
+  const tracking = document.createElement('section');
+  tracking.className = 'ride-tracking';
+  tracking.setAttribute('aria-label', 'Ride tracking progress');
+  const trackingHeading = document.createElement('h4');
+  trackingHeading.textContent = 'Ride tracking';
+  const trackingStatus = document.createElement('p');
+  trackingStatus.className = 'ride-tracking-status';
+  trackingStatus.textContent = dispatchStatusText(booking.dispatchStatus);
+  const stageNames = ['Booked', 'Driver assigned', 'On the way', 'At pickup', 'On ride', 'Complete'];
+  const stageIndex = ({
+    scheduled: 0,
+    profile_required: 0,
+    waiting: 0,
+    claimed: 1,
+    enroute: 2,
+    arrived: 3,
+    picked_up: 4,
+    completed: 5
+  })[booking.dispatchStatus] ?? 0;
+  const progress = document.createElement('div');
+  progress.className = 'ride-progress';
+  progress.setAttribute('role', 'progressbar');
+  progress.setAttribute('aria-label', 'Ride progress');
+  progress.setAttribute('aria-valuemin', '0');
+  progress.setAttribute('aria-valuemax', '100');
+  progress.setAttribute('aria-valuenow', String(Math.round((stageIndex / (stageNames.length - 1)) * 100)));
+  progress.setAttribute('aria-valuetext', stageNames[stageIndex]);
+  const progressFill = document.createElement('span');
+  progressFill.className = 'ride-progress-fill';
+  progressFill.style.width = `${(stageIndex / (stageNames.length - 1)) * 100}%`;
+  progress.appendChild(progressFill);
+  const stages = document.createElement('ol');
+  stages.className = 'ride-stages';
+  stageNames.forEach((name, index) => {
+    const item = document.createElement('li');
+    if (index < stageIndex) item.classList.add('complete');
+    if (index === stageIndex) item.classList.add('current');
+    const label = document.createElement('span');
+    label.textContent = name;
+    item.appendChild(label);
+    stages.appendChild(item);
+  });
+  const trackingNote = document.createElement('small');
+  trackingNote.className = 'muted ride-tracking-note';
+  trackingNote.textContent = 'Times are local (AM/PM). Live status refreshes every 15 seconds while this booking is open.';
+  tracking.append(trackingHeading, trackingStatus, progress, stages, trackingNote);
+  card.appendChild(tracking);
+  if (booking.robloxProfile?.username) {
+    const profile = document.createElement('a');
+    profile.href = booking.robloxProfile.profileUrl ||
+      `https://www.roblox.com/users/${encodeURIComponent(booking.robloxProfile.userId)}/profile`;
+    profile.target = '_blank';
+    profile.rel = 'noopener noreferrer';
+    profile.textContent = `Roblox profile: @${booking.robloxProfile.username}`;
+    card.appendChild(profile);
+  } else if (booking.status === 'confirmed' && booking.dispatchStatus === 'profile_required') {
+    const profileForm = document.createElement('form');
+    profileForm.className = 'profile-form booking-profile-form';
+    const username = document.createElement('input');
+    username.type = 'text';
+    username.name = 'username';
+    username.required = true;
+    username.minLength = 3;
+    username.maxLength = 20;
+    username.pattern = '[A-Za-z0-9_]{3,20}';
+    username.autocomplete = 'off';
+    username.placeholder = 'Roblox username';
+    username.setAttribute('aria-label', 'Roblox username');
+    const attach = document.createElement('button');
+    attach.type = 'submit';
+    attach.className = 'btn';
+    attach.textContent = 'Link profile for NPC driver';
+    profileForm.append(username, attach);
+    profileForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      attach.disabled = true;
+      try {
+        const result = await api(`/api/bookings/${encodeURIComponent(booking.reference)}/profile`, {
+          method: 'POST',
+          body: { manageKey, username: username.value.trim() }
+        });
+        renderBookingCard(result.booking, manageKey);
+        toast('Public profile linked. Your Roblox account must join the participating game server to board.');
+      } catch (error) {
+        toast(error.message);
+        attach.disabled = false;
+      }
+    });
+    const helper = document.createElement('small');
+    helper.className = 'muted';
+    helper.textContent = 'Public lookup only; the Roblox account linked here must join this ride’s participating game.';
+    card.append(profileForm, helper);
+  }
+  const game = state.maps[booking.mapId];
+  if (game?.placeId) {
+    const gamePlaceId = booking.placeId || game.placeId;
+    addRobloxLaunchLinks(card, gamePlaceId, booking.dispatchServerId || '');
+  }
   if (booking.status === 'confirmed' && Date.parse(booking.departureAt) > Date.now()) {
     const cancel = document.createElement('button');
     cancel.type = 'button';
@@ -339,26 +690,114 @@ function renderBookingCard(booking, manageKey) {
 async function lookupBooking(reference, key) {
   $('#lookupReference').value = reference;
   $('#lookupKey').value = key;
+  activeBooking = { reference, key };
   const details = $('#bookingDetails');
   details.replaceChildren();
   const loading = document.createElement('p');
   loading.className = 'muted';
   loading.textContent = 'Looking up booking…';
   details.appendChild(loading);
+  await refreshBookingDetails(true);
+}
+
+async function refreshBookingDetails(showError = false) {
+  if (!activeBooking) return;
+  const requestId = ++bookingDetailsRequest;
+  const { reference, key } = activeBooking;
   try {
     const result = await api(`/api/bookings/${encodeURIComponent(reference)}/lookup`, {
       method: 'POST',
       body: { manageKey: key }
     });
+    if (requestId !== bookingDetailsRequest) return;
     renderBookingCard(result.booking, key);
   } catch (error) {
+    if (requestId !== bookingDetailsRequest) return;
+    if (!showError) {
+      const note = $('.ride-tracking-note', $('#bookingDetails'));
+      if (note) note.textContent = 'Live update unavailable. Showing the last received status.';
+      return;
+    }
+    const details = $('#bookingDetails');
     details.replaceChildren();
     const message = document.createElement('p');
     message.className = 'booking-result error';
     message.textContent = error.message;
-    details.appendChild(message);
+    $('#bookingDetails').appendChild(message);
   }
 }
+
+function initializeApiConnection() {
+  const input = $('#apiBaseUrl');
+  const status = $('#apiConnectionStatus');
+  if (!input || !status) return;
+  input.value = activeApiBase();
+  status.textContent = activeApiBase()
+    ? 'Server address configured.'
+    : 'No server connected. Enter a public HTTPS UBERS server URL.';
+}
+
+$('#apiConnectionForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const input = $('#apiBaseUrl');
+  const status = $('#apiConnectionStatus');
+  const value = input.value.trim().replace(/\/+$/, '');
+  if (!value) {
+    try { localStorage.setItem(apiOverrideStorageKey, ''); } catch {}
+    status.textContent = 'Saved server connection cleared.';
+    window.location.reload();
+    return;
+  }
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    status.textContent = 'Enter a valid HTTPS URL.';
+    return;
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password ||
+      parsed.pathname !== '/' || parsed.search || parsed.hash) {
+    status.textContent = 'Use the server origin only, for example https://your-tunnel.example.com.';
+    return;
+  }
+  try {
+    localStorage.setItem(apiOverrideStorageKey, value);
+  } catch {
+    status.textContent = 'This browser could not save the server address.';
+    return;
+  }
+  status.textContent = 'Checking connection…';
+  try {
+    await api('/api/health');
+    status.textContent = 'Connected to the UBERS server. Reloading to refresh the live app…';
+    window.location.reload();
+  } catch (error) {
+    try { localStorage.removeItem(apiOverrideStorageKey); } catch {}
+    status.textContent = `Server check failed: ${error.message}`;
+  }
+});
+
+$('#bookingProfileLookup').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const profile = await lookupRobloxProfile(
+      $('#bookingRobloxUsername').value.trim(),
+      $('#bookingProfileResult')
+    );
+    if (profile) {
+      if (!$('#rideName').value.trim()) $('#rideName').value = profile.displayName;
+      toast(`Public profile found: @${profile.username}. This lookup does not verify account ownership.`);
+    }
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('#robloxProfileForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  await lookupRobloxProfile($('#robloxProfileUsername').value.trim(), $('#robloxProfileResult'), true);
+});
 
 $('#rideMap').addEventListener('change', configureBookingForm);
 $('#rideRoute').addEventListener('change', loadTimetable);
@@ -378,7 +817,8 @@ $('#bookingForm').addEventListener('submit', async (event) => {
         dropoffPoiId: $('#rideDropoff').value,
         departureAt: $('#rideDeparture').value,
         seats: Number($('#rideSeats').value),
-        riderName: $('#rideName').value
+        riderName: $('#rideName').value,
+        robloxUsername: $('#bookingRobloxUsername').value.trim() || undefined
       }
     });
     const booking = result.booking;
@@ -386,7 +826,7 @@ $('#bookingForm').addEventListener('submit', async (event) => {
     await loadTimetable();
     setBookingResult(
       'Your roleplay ride is reserved!',
-      `${booking.reference} · ${booking.routeName} · ${new Date(booking.departureAt).toLocaleString()}`,
+      `${booking.reference} · ${booking.routeName} · ${localDateTime(booking.departureAt)}`,
       false,
       booking.manageKey
     );
@@ -772,9 +1212,17 @@ $$('#quickAsks .chip').forEach((c) => c.addEventListener('click', () => sendChat
 /* ---------------- Stripe ---------------- */
 async function loadPlans() {
   try {
-    const { plans, currency } = await api('/api/billing/plans');
+    const { plans, currency, checkoutEnabled } = await api('/api/billing/plans');
     const grid = $('#planGrid');
+    const paymentStatus = $('#paymentStatus');
     grid.innerHTML = '';
+    if (paymentStatus) {
+      paymentStatus.hidden = Boolean(checkoutEnabled);
+      paymentStatus.className = 'banner bad';
+      paymentStatus.textContent = window.UBERS_STATIC_MODE && !activeApiBase()
+        ? 'Payments are unavailable on this static site until it is connected to a running UBERS server.'
+        : 'Payments are not configured on the connected server. Add your private Stripe secret key (sk_live_…) as STRIPE_SECRET_KEY on the server, then restart it. The publishable pk_live_… key alone cannot create Checkout sessions.';
+    }
     plans.forEach((p) => {
       const card = document.createElement('div');
       card.className = 'card plan';
@@ -782,8 +1230,11 @@ async function loadPlans() {
         <h3>${p.name}</h3>
         <div class="price">${p.display}</div>
         <div class="desc">${p.desc}</div>
-        <button class="btn" data-plan="${p.id}">${window.UBERS_STATIC_MODE ? 'Requires Windows app' : 'Subscribe with Stripe'}</button>`;
-      card.querySelector('button').addEventListener('click', async (ev) => {
+        <small class="muted plan-payment-type">One-time payment</small>
+        <button class="btn" data-plan="${p.id}">${checkoutEnabled ? 'Buy with Stripe' : 'Payments unavailable'}</button>`;
+      const button = card.querySelector('button');
+      button.disabled = !checkoutEnabled;
+      button.addEventListener('click', async (ev) => {
         const btn = ev.currentTarget;
         btn.disabled = true;
         btn.textContent = 'Redirecting...';
@@ -792,6 +1243,25 @@ async function loadPlans() {
           window.location = url;
         } catch (e) {
           toast(e.message);
+          if (e.setupRequired) {
+            const paymentStatus = $('#paymentStatus');
+            paymentStatus.hidden = false;
+            paymentStatus.className = 'banner bad';
+            paymentStatus.replaceChildren(
+              document.createTextNode(`${e.message} The account owner must submit accurate business, tax, payout, and terms information in `)
+            );
+            const dashboard = document.createElement('a');
+            dashboard.href = 'https://dashboard.stripe.com/get-started';
+            dashboard.target = '_blank';
+            dashboard.rel = 'noopener';
+            dashboard.textContent = 'Stripe Dashboard';
+            paymentStatus.append(dashboard, document.createTextNode('.'));
+            $('#planGrid').querySelectorAll('button[data-plan]').forEach((planButton) => {
+              planButton.disabled = true;
+              planButton.textContent = 'Stripe setup required';
+            });
+            return;
+          }
           btn.disabled = false;
           btn.textContent = 'Try again';
         }
@@ -826,9 +1296,18 @@ async function handleCheckoutParam() {
 /* ---------------- Roblox ---------------- */
 async function loadGames() {
   try {
-    const { games } = await api('/api/roblox/games');
+    const { games, setupRequired, message } = await api('/api/roblox/games');
     const grid = $('#gameGrid');
     grid.innerHTML = '';
+    if (!games.length) {
+      const notice = document.createElement('p');
+      notice.className = 'card muted';
+      notice.textContent = message || (setupRequired
+        ? 'Configure your own Roblox place IDs in the server .env to enable game stats and joins.'
+        : 'No configured Roblox places are available.');
+      grid.appendChild(notice);
+      return;
+    }
     games.forEach((g) => {
       const card = document.createElement('div');
       card.className = 'card game';
@@ -840,11 +1319,15 @@ async function loadGames() {
         <div class="stat-row"><span>Favorites</span><b data-stat="favorites"></b></div>
         <div class="stat-row"><span>Approval</span><b data-stat="rating"></b></div>
         <div class="bar"><span></span></div>
-        <a class="btn ghost game-link" target="_blank" rel="noopener">Open on Roblox</a>
+        <div class="roblox-launch-links">
+          <a class="btn game-app-link">Launch Roblox app</a>
+          <a class="btn ghost game-link" target="_blank" rel="noopener">Open game page</a>
+        </div>
+        <small class="muted roblox-launch-hint">Opens your configured place. UBERS NPC drivers run only where you installed the server script.</small>
         <p class="game-error muted" hidden></p>
         <section class="server-browser">
           <h4>Live public servers</h4>
-          <p class="server-status muted">Loading official Roblox server data…</p>
+          <p class="server-status muted">Loading Roblox public-server data…</p>
           <div class="server-list"></div>
           <button class="btn ghost server-more" type="button" hidden>Load next 100 servers</button>
         </section>`;
@@ -859,7 +1342,15 @@ async function loadGames() {
       card.querySelector('[data-stat="favorites"]').textContent = fmt(g.favorites);
       card.querySelector('[data-stat="rating"]').textContent = g.rating == null ? 'n/a' : `${g.rating}%`;
       card.querySelector('.bar > span').style.width = `${Math.max(0, Math.min(100, Number(g.rating) || 0))}%`;
-      card.querySelector('.game-link').href = `https://www.roblox.com/games/${encodeURIComponent(g.placeId)}`;
+      const placeId = String(g.placeId);
+      if (/^\d{1,20}$/.test(placeId)) {
+        card.querySelector('.game-app-link').href =
+          `roblox://experiences/start?${new URLSearchParams({ placeId })}`;
+        card.querySelector('.game-link').href = `https://www.roblox.com/games/${encodeURIComponent(placeId)}`;
+      } else {
+        card.querySelector('.game-app-link').remove();
+        card.querySelector('.game-link').remove();
+      }
       if (g.error) {
         const error = card.querySelector('.game-error');
         error.textContent = g.error;
@@ -879,7 +1370,7 @@ async function loadGames() {
 
 async function loadPublicServers(placeId, status, list, more, pageState) {
   more.disabled = true;
-  status.textContent = pageState.cursor ? 'Loading next page from Roblox…' : 'Loading official Roblox server data…';
+  status.textContent = pageState.cursor ? 'Loading next page from Roblox…' : 'Loading Roblox public-server data…';
   try {
     const query = new URLSearchParams({ placeId });
     if (pageState.cursor) query.set('cursor', pageState.cursor);
@@ -935,10 +1426,22 @@ function activateView(name, wifiPreselect) {
   if (name === 'wifi') loadWifi(wifiPreselect);
   if (name === 'premium') loadPlans();
   if (name === 'roblox') loadGames();
+  if (name === 'myrides') {
+    renderSavedBookings();
+    if (!savedBookingRefreshTimer) {
+      savedBookingRefreshTimer = setInterval(() => {
+        if (document.visibilityState === 'visible' && $('#view-myrides').classList.contains('active')) {
+          refreshSavedBookingStatuses();
+          refreshBookingDetails();
+        }
+      }, 15000);
+    }
+  }
 }
 
 async function boot() {
-  if (window.UBERS_STATIC_MODE && !window.UBERS_API_BASE_URL) {
+  initializeApiConnection();
+  if (window.UBERS_STATIC_MODE && !activeApiBase()) {
     $('.brand-sub').textContent = 'ROBLOX · LIVE DATA NOT CONNECTED';
     $('#view-integrate .hero p').textContent = 'Configure your Cloudflare HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data and roleplay bookings.';
     addMsg('Live Roblox data and roleplay bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
@@ -953,7 +1456,7 @@ async function boot() {
   await pollTracking();
   setInterval(pollTracking, 2000);
 
-  if (window.UBERS_STATIC_MODE && !window.UBERS_API_BASE_URL) {
+  if (window.UBERS_STATIC_MODE && !activeApiBase()) {
     $('#pillLive').textContent = '● API NOT CONNECTED';
     $('#pillLive').classList.remove('live');
     $('.brand-sub').textContent = 'ROBLOX · LIVE DATA NOT CONNECTED';
