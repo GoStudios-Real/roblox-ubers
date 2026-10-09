@@ -46,11 +46,8 @@ function fmt(n) {
 /* ---------------- views ---------------- */
 $$('#tabs .tab').forEach((btn) =>
   btn.addEventListener('click', () => {
-    $$('#tabs .tab').forEach((b) => b.classList.toggle('active', b === btn));
-    $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${btn.dataset.view}`));
-    if (btn.dataset.view === 'wifi') loadWifi();
-    if (btn.dataset.view === 'premium') loadPlans();
-    if (btn.dataset.view === 'roblox') loadGames();
+    location.hash = btn.dataset.view;
+    activateView(btn.dataset.view);
     if (btn.dataset.view === 'ai') $('#chatInput').focus();
   })
 );
@@ -110,12 +107,11 @@ function renderMap() {
     if (!isWifi) {
       g.appendChild(el('text', { x: p.x + 12, y: p.y + 5, class: 'poi-label' }, p.name));
     } else {
-      g.appendChild(el('text', { x: p.x + 14, y: p.y + 5, class: 'poi-label' }, '📶 ' + p.name.replace('FREE WIFI - ', '')));
+      g.appendChild(el('text', { x: p.x + 14, y: p.y + 5, class: 'poi-label' }, '📶 WiFi · ' + p.name.replace('FREE WIFI - ', '')));
     }
     g.addEventListener('click', () => {
       if (isWifi) {
-        activateView('wifi');
-        loadWifi(p.id);
+        activateView('wifi', p.id);
       } else {
         toast(`${p.name} · ${map.name}`);
       }
@@ -158,14 +154,22 @@ function drawVehicles() {
     if (!g) {
       g = el('g', { class: 'veh', 'data-vid': v.id });
       g.appendChild(el('circle', { class: 'ring', r: 17 }));
-      g.appendChild(el('rect', { class: 'body', x: -14, y: -10, width: 28, height: 20, rx: 7, fill: TYPE_COLOR[v.type] || '#fff' }));
-      g.appendChild(el('text', { x: 0, y: 5, 'text-anchor': 'middle' }, ICON[v.type] || '🚗'));
-      g.appendChild(el('text', { x: 0, y: 26, 'text-anchor': 'middle', fill: '#cfe0f7', 'font-size': 10 }, v.plate));
+      const rot = el('g', { class: 'rot' });
+      rot.appendChild(el('rect', { class: 'body', x: -14, y: -10, width: 28, height: 20, rx: 7, fill: TYPE_COLOR[v.type] || '#fff' }));
+      rot.appendChild(el('text', { x: 0, y: 5, 'text-anchor': 'middle' }, ICON[v.type] || '🚗'));
+      g.appendChild(rot);
+      const plateG = el('g', { class: 'plate', visibility: 'hidden' });
+      const w = v.plate.length * 7 + 12;
+      plateG.appendChild(el('rect', { x: -w / 2, y: 16, width: w, height: 16, rx: 8, fill: '#04121c', stroke: TYPE_COLOR[v.type] || '#fff', 'stroke-width': 1.5 }));
+      plateG.appendChild(el('text', { x: 0, y: 28, 'text-anchor': 'middle', fill: '#e6edf7', 'font-size': 11, 'font-weight': 700 }, v.plate));
+      g.appendChild(plateG);
       g.addEventListener('click', (e) => { e.stopPropagation(); selectVehicle(v.id); });
       layer.appendChild(g);
     }
-    const rot = Number.isFinite(v.heading) ? v.heading : 0;
-    g.setAttribute('transform', `translate(${v.x},${v.y}) rotate(${rot})`);
+    const deg = Number.isFinite(v.heading) ? v.heading : 0;
+    g.setAttribute('transform', `translate(${v.x},${v.y})`);
+    g.querySelector('.rot').setAttribute('transform', `rotate(${deg})`);
+    g.querySelector('.plate').setAttribute('visibility', state.selected === v.id ? 'visible' : 'hidden');
     g.classList.toggle('sel', state.selected === v.id);
     g.style.opacity = v.external ? '1' : '0.97';
   });
@@ -420,9 +424,14 @@ $('#keyCheckBtn').addEventListener('click', async () => {
 });
 
 /* ---------------- boot ---------------- */
-function activateView(name) {
+function activateView(name, wifiPreselect) {
+  if (!$(`#view-${name}`)) return;
+  if (location.hash !== `#${name}`) location.hash = name;
   $$('#tabs .tab').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${name}`));
+  if (name === 'wifi') loadWifi(wifiPreselect);
+  if (name === 'premium') loadPlans();
+  if (name === 'roblox') loadGames();
 }
 
 async function boot() {
@@ -440,6 +449,12 @@ async function boot() {
     $('#pillLive').textContent = `● LIVE · ${on}/4 APIs`;
   }).catch(() => {});
 
-  handleCheckoutParam();
+  const initial = location.hash.replace('#', '');
+  if (initial) activateView(initial);
+
+  handleCheckoutParam().then(() => {
+    if (new URLSearchParams(location.search).get('checkout')) activateView('premium');
+    window.addEventListener('hashchange', () => activateView(location.hash.replace('#', '') || 'map'));
+  });
 }
 boot();

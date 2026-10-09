@@ -93,7 +93,7 @@ async function robloxGameInfo(placeId) {
       fetch(`https://games.roblox.com/v1/games?universeIds=${universeId}`),
       fetch(`https://games.roblox.com/v1/games/votes?universeIds=${universeId}`),
       fetch(
-        `https://thumbnails.roblox.com/v1/places/icons?placeIds=${placeId}&returnPolicy=PlaceHolder&size=512x512&format=Png&isCircular=false`
+        `https://thumbnails.roblox.com/v1/games/icons?universeIds=${universeId}&returnPolicy=PlaceHolder&size=512x512&format=Png&isCircular=false`
       )
     ]);
     if (gamesRes.ok) {
@@ -102,8 +102,9 @@ async function robloxGameInfo(placeId) {
         out.name = g.name;
         out.playing = g.playing;
         out.visits = g.visits;
-        out.favorites = g.favorites;
+        out.favorites = g.favoritedCount;
         out.maxPlayers = g.maxPlayers;
+        out.created = g.created;
         out.updated = g.updated;
         out.genre = g.genre;
         out.description = (g.description || '').slice(0, 300);

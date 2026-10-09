@@ -116,11 +116,12 @@ main { flex: 1; padding: 20px; max-width: 1500px; width: 100%; margin: 0 auto; }
 .poi-dot:hover circle { r: 11; }
 .poi-label { fill: #cfe0f7; font-size: 13px; pointer-events: none; }
 .route-line { fill: none; stroke-width: 4; stroke-dasharray: 10 8; opacity: 0.55; }
-.veh { cursor: pointer; transition: transform 1s linear; }
+.veh { cursor: pointer; }
+.veh .rot { transition: transform 1s linear; }
 .veh .body { stroke: #04121c; stroke-width: 2; }
 .veh .ring { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0; }
 .veh.sel .ring { opacity: 1; }
-.veh text { font-size: 11px; fill: #06101d; font-weight: 800; pointer-events: none; }
+.veh text { font-size: 11px; pointer-events: none; }
 
 /* ---------- fleet panel ---------- */
 .fleet-panel {

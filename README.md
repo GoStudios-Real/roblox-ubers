@@ -22,7 +22,10 @@ Live **car / bus / taxi tracking** for Roblox roleplay games — built around **
 npm install
 cp .env.example .env    # add your keys
 npm start               # http://localhost:3000
+npm test                # 11-check smoke test (server + every integration)
 ```
+
+Deep links: `/#map` `/#wifi` `/#ai` `/#premium` `/#roblox` `/#integrate`
 
 ## .env
 
