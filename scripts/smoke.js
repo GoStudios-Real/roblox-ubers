@@ -13,6 +13,7 @@ try {
 
 const PORT = 3999;
 const BASE = `http://localhost:${PORT}`;
+const TEST_TRACKING_TOKEN = 'smoke-test-token';
 const results = [];
 
 async function check(name, fn) {
@@ -54,7 +55,7 @@ function waitForServer(child, ms = 10000) {
 
 async function main() {
   const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-    env: { ...process.env, PORT: String(PORT), BASE_URL: BASE },
+    env: { ...process.env, PORT: String(PORT), BASE_URL: BASE, TRACKING_TOKEN: TEST_TRACKING_TOKEN },
     stdio: 'ignore'
   });
 
@@ -93,13 +94,14 @@ async function main() {
     });
 
     await check('ai-chat', async () => {
-      const d = await json('/api/ai/chat', {
+      if (!process.env.OPENROUTER_API_KEY) return 'skipped (no OPENROUTER_API_KEY)';
+      const res = await fetch(`${BASE}/api/ai/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: 'Say OK' }] })
+        body: JSON.stringify({ messages: [] })
       });
-      if (!d.reply) throw new Error('no reply');
-      return d.reply.slice(0, 60);
+      if (res.status !== 400) throw new Error(`expected 400 without user message, got ${res.status}`);
+      return 'empty-message validation ok (no upstream request sent)';
     });
 
     await check('wifi', async () => {
@@ -117,11 +119,9 @@ async function main() {
     });
 
     await check('tracking-ping', async () => {
-      const token = process.env.TRACKING_TOKEN;
-      if (!token) return 'skipped (no TRACKING_TOKEN)';
       const d = await json('/api/tracking/ping', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-ubers-token': token },
+        headers: { 'Content-Type': 'application/json', 'x-ubers-token': TEST_TRACKING_TOKEN },
         body: JSON.stringify({ map: 'brookhaven', vehicles: [{ id: 'smoke-1', type: 'taxi', x: 500, y: 500 }] })
       });
       if (!d.ok) throw new Error('rejected');

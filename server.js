@@ -1,5 +1,10 @@
-require('dotenv').config();
 const path = require('path');
+const { execFile } = require('child_process');
+if (process.pkg) {
+  require('dotenv').config({ path: path.join(path.dirname(process.execPath), '.env') });
+} else {
+  require('dotenv').config();
+}
 const crypto = require('crypto');
 const express = require('express');
 const Stripe = require('stripe');
@@ -336,6 +341,11 @@ app.get(/^\/(?!api\/).*/, (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`ROBLOX UBERS running on ${BASE_URL}`);
+  if (process.pkg && process.platform === 'win32' && !process.env.UBERS_NO_BROWSER) {
+    execFile('rundll32.exe', ['url.dll,FileProtocolHandler', `http://localhost:${PORT}`], (error) => {
+      if (error) console.error(`Could not open your browser. Visit http://localhost:${PORT}`);
+    });
+  }
   console.log(
     `Integrations: openrouter=${hasKey('OPENROUTER_API_KEY')} stripe=${hasKey(
       'STRIPE_SECRET_KEY'
