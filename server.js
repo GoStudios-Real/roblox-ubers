@@ -11,11 +11,15 @@ const Stripe = require('stripe');
 
 const { MAPS, getMap } = require('./lib/maps');
 const fleet = require('./lib/fleet');
+const players = require('./lib/players');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
-const TRACKING_TOKEN = process.env.TRACKING_TOKEN || '';
+const TRACKING_TOKEN =
+  process.env.TRACKING_TOKEN === 'change-me-to-a-long-random-string'
+    ? ''
+    : process.env.TRACKING_TOKEN || '';
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 app.use(express.json({ limit: '256kb' }));
@@ -38,7 +42,8 @@ app.get('/api/health', (_req, res) =>
       openrouter: hasKey('OPENROUTER_API_KEY'),
       stripe: hasKey('STRIPE_SECRET_KEY'),
       robloxApiKey: hasKey('ROBLOX_API_KEY'),
-      trackingToken: Boolean(TRACKING_TOKEN)
+      trackingToken: Boolean(TRACKING_TOKEN),
+      playerTracking: Boolean(TRACKING_TOKEN)
     }
   })
 );
@@ -58,6 +63,24 @@ app.get('/api/tracking', (req, res) => {
 });
 
 app.get('/api/tracking/stats', (_req, res) => h(res, 200, fleet.stats()));
+
+app.get('/api/players', (req, res) => {
+  const mapId = req.query.map ? String(req.query.map) : null;
+  if (mapId && !getMap(mapId)) return h(res, 404, { error: 'map not found' });
+  h(res, 200, { ...players.snapshot(mapId), time: Date.now(), ttlMs: players.PLAYER_TTL_MS });
+});
+
+app.post('/api/players/ping', (req, res) => {
+  if (!TRACKING_TOKEN) return h(res, 503, { error: 'TRACKING_TOKEN not configured on server' });
+  if ((req.get('x-ubers-token') || req.body?.token) !== TRACKING_TOKEN) {
+    return h(res, 401, { error: 'invalid tracking token' });
+  }
+  try {
+    h(res, 200, { ok: true, ...players.reportFromRoblox(req.body, TRACKING_TOKEN) });
+  } catch (e) {
+    h(res, 400, { ok: false, error: e.message });
+  }
+});
 
 app.post('/api/tracking/ping', (req, res) => {
   if (!TRACKING_TOKEN) return h(res, 503, { error: 'TRACKING_TOKEN not configured on server' });

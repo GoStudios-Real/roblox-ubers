@@ -1,16 +1,21 @@
 --!strict
 -- ROBLOX UBERS vehicle tracker
--- Place in ServerScriptService. Reports every vehicle model tagged "UBERS_Vehicle"
--- (or listed in VEHICLE_NAMES) to the UBERS website so it shows on the live map.
+-- Place in ServerScriptService in a Roblox experience you own. Reports anonymous
+-- player positions and tagged vehicles to your publicly reachable UBERS server.
 
 local HttpService = game:GetService("HttpService")
-local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
-local BASE_URL = "http://localhost:3000" -- change to your deployed site (no trailing slash)
+local BASE_URL = "https://your-public-ubers-server.example.com" -- HTTPS URL, no trailing slash
 local TRACKING_TOKEN = "change-me-to-a-long-random-string" -- must match .env TRACKING_TOKEN
 local MAP_ID = "brookhaven" -- "brookhaven" or "bloxburg"
-local REPORT_EVERY = 3 -- seconds
+local REPORT_EVERY = 5 -- seconds
+local WORLD_MIN_X = -500 -- Set these four bounds to the playable map edges in studs.
+local WORLD_MAX_X = 500
+local WORLD_MIN_Z = -500
+local WORLD_MAX_Z = 500
+local serverId = if game.JobId ~= "" then game.JobId else HttpService:GenerateGUID(false)
 local TYPE_BY_NAME = {
 	["bus"] = "bus",
 	["taxi"] = "taxi",
@@ -18,10 +23,10 @@ local TYPE_BY_NAME = {
 }
 
 local function mapVector(p: Vector3): { x: number, y: number }
-	-- World (-500..500) -> map space (0..1000)
+	-- Normalize world coordinates to the map's 0..1000 coordinate space.
 	return {
-		x = math.clamp((p.X + 500) / 1000 * 1000, 0, 1000),
-		y = math.clamp((p.Z + 500) / 1000 * 1000, 0, 1000),
+		x = math.clamp((p.X - WORLD_MIN_X) / (WORLD_MAX_X - WORLD_MIN_X) * 1000, 0, 1000),
+		y = math.clamp((p.Z - WORLD_MIN_Z) / (WORLD_MAX_Z - WORLD_MIN_Z) * 1000, 0, 1000),
 	}
 end
 
@@ -59,21 +64,53 @@ local function collectVehicles(): { any }
 	return list
 end
 
+local function collectPlayers(): { any }
+	local list = {}
+	for _, player in ipairs(Players:GetPlayers()) do
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if player:GetAttribute("UBERS_TrackingOptOut") ~= true and root and root:IsA("BasePart") then
+			local world = root.Position
+			if world.X >= WORLD_MIN_X and world.X <= WORLD_MAX_X and world.Z >= WORLD_MIN_Z and world.Z <= WORLD_MAX_Z then
+				local pos = mapVector(world)
+				table.insert(list, {
+					userId = player.UserId,
+					x = math.floor(pos.x),
+					y = math.floor(pos.y),
+					heading = math.floor(root.Orientation.Y),
+				})
+			end
+		end
+	end
+	return list
+end
+
+local function post(endpoint: string, payload: { [string]: any })
+	local response = HttpService:RequestAsync({
+		Url = BASE_URL .. endpoint,
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/json",
+			["x-ubers-token"] = TRACKING_TOKEN,
+		},
+		Body = HttpService:JSONEncode(payload),
+	})
+	if not response.Success then
+		warn(`[UBERS] {endpoint} returned HTTP {response.StatusCode}`)
+	end
+end
+
 local function report()
 	local ok, err = pcall(function()
-		local vehicles = collectVehicles()
-		if #vehicles == 0 then
-			return
-		end
-		HttpService:RequestAsync({
-			Url = BASE_URL .. "/api/tracking/ping",
-			Method = "POST",
-			Headers = {
-				["Content-Type"] = "application/json",
-				["x-ubers-token"] = TRACKING_TOKEN,
-			},
-			Body = HttpService:JSONEncode({ token = TRACKING_TOKEN, map = MAP_ID, vehicles = vehicles }),
+		post("/api/players/ping", {
+			map = MAP_ID,
+			serverId = serverId,
+			players = collectPlayers(),
 		})
+		local vehicles = collectVehicles()
+		if #vehicles > 0 then
+			post("/api/tracking/ping", { map = MAP_ID, vehicles = vehicles })
+		end
 	end)
 	if not ok then
 		warn("[UBERS] report failed: " .. tostring(err))

@@ -26,6 +26,7 @@
     <div class="status" id="statusPills">
       <span class="pill" id="pillFleet">FLEET ...</span>
       <span class="pill live" id="pillLive">● LIVE</span>
+      <span class="pill" id="pillPlayers">● PLAYERS ...</span>
     </div>
   </header>
 
@@ -59,6 +60,14 @@
             <span class="count" id="fleetCount">0</span>
           </div>
           <div class="vehicle-list" id="vehicleList"></div>
+          <div class="player-panel">
+            <div class="panel-head">
+              <h3>Live Roblox players</h3>
+              <span class="count" id="playerCount">0</span>
+            </div>
+            <p class="player-status muted" id="playerStatus">Waiting for a connected Roblox game server.</p>
+            <div class="player-list" id="playerList"></div>
+          </div>
           <div class="selected" id="selectedCard">
             <p class="muted">Tap a vehicle on the map or in the list to see details.</p>
           </div>
@@ -149,23 +158,24 @@
     <section class="view" id="view-integrate">
       <div class="hero">
         <h1>Put UBERS tracking in your Roblox game</h1>
-        <p>Drop the tracker script into ServerScriptService, set the token, and your vehicles appear on this site live.</p>
+        <p>Install the server script in an experience you own to send anonymous live player positions and vehicle locations to a public UBERS server. Roblox's public game API does not expose in-world player positions.</p>
       </div>
       <div class="grid">
         <div class="card">
-          <h3>1. Server</h3>
+          <h3>1. Public server</h3>
           <pre><code>npm install
 cp .env.example .env   # add your keys
 npm start              # http://localhost:3000</code></pre>
+          <p class="muted">Roblox servers cannot reach your PC's localhost. Deploy this server at a public HTTPS URL, set <code>BASE_URL</code> in the Roblox script, and allow outbound HTTP in Roblox Studio.</p>
         </div>
         <div class="card">
           <h3>2. Roblox Studio</h3>
-          <p class="muted">Copy <code>roblox/UBERS_VehicleTracker.server.lua</code> into <b>ServerScriptService</b> and set <code>TRACKING_TOKEN</code> to the same value as your <code>.env</code>.</p>
+          <p class="muted">Only install this script in an experience you own. Copy <code>roblox/UBERS_VehicleTracker.server.lua</code> into <b>ServerScriptService</b>, set the same <code>TRACKING_TOKEN</code>, and configure <code>MAP_ID</code> and the playable world bounds.</p>
         </div>
         <div class="card">
-          <h3>3. Your token</h3>
+          <h3>3. Anonymous positions</h3>
           <code class="token" id="tokenHint">hidden</code>
-          <p class="muted">The token never leaves the server - only the health of the link is shown here.</p>
+          <p class="muted">Player names and account IDs are not shown. Reports expire after 20 seconds; set the player's <code>UBERS_TrackingOptOut</code> attribute to <code>true</code> to exclude them.</p>
         </div>
       </div>
       <div class="card">
@@ -173,6 +183,8 @@ npm start              # http://localhost:3000</code></pre>
         <table class="api">
           <tr><td>GET</td><td>/api/tracking?map=brookhaven</td><td>Live vehicle positions</td></tr>
           <tr><td>POST</td><td>/api/tracking/ping</td><td>Roblox place reports vehicles (x-ubers-token)</td></tr>
+          <tr><td>GET</td><td>/api/players?map=brookhaven</td><td>Anonymous, recent player positions</td></tr>
+          <tr><td>POST</td><td>/api/players/ping</td><td>Roblox server reports its player roster (x-ubers-token)</td></tr>
           <tr><td>GET</td><td>/api/roblox/games?placeIds=...</td><td>Roblox game stats + icons</td></tr>
           <tr><td>POST</td><td>/api/ai/chat</td><td>OpenRouter AI support</td></tr>
           <tr><td>POST</td><td>/api/billing/checkout</td><td>Stripe checkout session</td></tr>
