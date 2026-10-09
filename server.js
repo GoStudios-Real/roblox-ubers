@@ -57,6 +57,7 @@ app.get('/api/health', (_req, res) =>
   h(res, 200, {
     ok: true,
     name: 'ROBLOX UBERS',
+    apiVersion: 2,
     time: new Date().toISOString(),
     integrations: {
       openrouter: hasKey('OPENROUTER_API_KEY'),

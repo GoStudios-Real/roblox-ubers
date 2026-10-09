@@ -20,6 +20,8 @@ const ICON = { car: '🚗', bus: '🚌', taxi: '🚕' };
 const TYPE_COLOR = { car: '#ef5da8', bus: '#4dd2ff', taxi: '#ffd166' };
 const apiOverrideStorageKey = 'roblox-ubers-api-base-url';
 const soundPreferenceKey = 'roblox-ubers-sound-enabled';
+let apiCompatibilityPromise = null;
+let apiServerOutdated = false;
 let soundEnabled = false;
 let soundContext = null;
 try {
@@ -43,6 +45,18 @@ async function api(path, opts = {}) {
   const apiBase = activeApiBase();
   if (window.UBERS_STATIC_MODE && !apiBase) return staticApi(path, opts);
   const tunnelHeaders = apiBase.includes('.trycloudflare.com') ? { 'cf-skip-browser-warning': '1' } : {};
+  if (window.UBERS_STATIC_MODE && !apiCompatibilityPromise) {
+    apiCompatibilityPromise = fetch(`${apiBase}/api/health`, { headers: tunnelHeaders })
+      .then(async (response) => {
+        const health = await response.json().catch(() => ({}));
+        if (health.apiVersion !== 2) {
+          apiServerOutdated = true;
+          throw new Error('The connected UBERS server is outdated. Update and restart the Windows app to enable bookings, Roblox usernames, and owner-place safety.');
+        }
+        if (!response.ok) throw new Error('The connected UBERS server is not responding correctly.');
+      });
+  }
+  if (window.UBERS_STATIC_MODE) await apiCompatibilityPromise;
   const res = await fetch(`${apiBase}${path}`, {
     headers: { 'Content-Type': 'application/json', ...tunnelHeaders },
     ...opts,
@@ -1107,7 +1121,9 @@ async function pollTracking() {
       $('#pillLive').classList.remove('live');
     }
   } catch (e) {
-    $('#pillLive').textContent = '● OFFLINE';
+    $('#pillLive').textContent = window.UBERS_STATIC_MODE && apiServerOutdated
+      ? '● SERVER UPDATE REQUIRED'
+      : '● OFFLINE';
     $('#pillLive').classList.remove('live');
   }
   await pollPlayers();
@@ -1451,7 +1467,21 @@ async function boot() {
     maps.forEach((m) => (state.maps[m.id] = m));
     renderMap();
     initializeBookingForm();
-  } catch (e) { toast(e.message); }
+  } catch (e) {
+    toast(e.message);
+    const maps = window.UBERS_STATIC_MODE ? window.UBERS_STATIC_DATA?.maps || [] : [];
+    maps.forEach((map) => (state.maps[map.id] = map));
+    if (maps.length) {
+      renderMap();
+      initializeBookingForm();
+    }
+    if (window.UBERS_STATIC_MODE && activeApiBase() && apiServerOutdated) {
+      $('#pillLive').textContent = '● SERVER UPDATE REQUIRED';
+      $('#pillLive').classList.remove('live');
+      $('.brand-sub').textContent = 'ROBLOX · BACKEND UPDATE REQUIRED';
+      $('#view-integrate .hero p').textContent = e.message;
+    }
+  }
 
   await pollTracking();
   setInterval(pollTracking, 2000);
