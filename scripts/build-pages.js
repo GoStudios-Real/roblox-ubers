@@ -5,6 +5,7 @@ const { MAPS } = require('../lib/maps');
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'dist', 'pages');
 const vehicles = [];
+const players = [];
 let index = 0;
 
 for (const map of Object.values(MAPS)) {
@@ -31,12 +32,25 @@ for (const map of Object.values(MAPS)) {
   }
 }
 
+for (const map of Object.values(MAPS)) {
+  const landmarks = map.pois.filter((poi) => poi.cat !== 'wifi').slice(0, 8);
+  landmarks.forEach((poi, playerIndex) => {
+    players.push({
+      id: `demo-${map.id}-player-${playerIndex + 1}`,
+      map: map.id,
+      x: poi.x + ((playerIndex % 3) - 1) * 12,
+      y: poi.y + ((playerIndex % 2) ? 10 : -10),
+      heading: 0
+    });
+  });
+}
+
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
 fs.cpSync(path.join(ROOT, 'public'), OUT, { recursive: true });
 fs.writeFileSync(
   path.join(OUT, 'static-config.js'),
-  `window.UBERS_STATIC_MODE = true;\nwindow.UBERS_STATIC_DATA = ${JSON.stringify({ maps: Object.values(MAPS), vehicles })};\n`
+  `window.UBERS_STATIC_MODE = true;\nwindow.UBERS_STATIC_DATA = ${JSON.stringify({ maps: Object.values(MAPS), vehicles, players })};\n`
 );
 fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
 console.log(`GitHub Pages site built in ${path.relative(ROOT, OUT)} (${vehicles.length} demo vehicles).`);

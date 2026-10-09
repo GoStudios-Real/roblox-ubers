@@ -3,6 +3,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const playerTracker = require('../lib/players');
 
 const ROOT = path.join(__dirname, '..');
 try {
@@ -13,7 +14,7 @@ try {
 
 const PORT = 3999;
 const BASE = `http://localhost:${PORT}`;
-const TEST_TRACKING_TOKEN = 'smoke-test-token';
+const TEST_TRACKING_TOKEN = 'smoke-test-token-do-not-use-in-production-0123456789abcdef';
 const results = [];
 
 async function check(name, fn) {
@@ -65,7 +66,7 @@ async function main() {
     await check('health', async () => {
       const d = await json('/api/health');
       if (!d.ok) throw new Error('not ok');
-      return `integrations=${Object.values(d.integrations).filter(Boolean).length}/4`;
+      return `integrations=${Object.values(d.integrations).filter(Boolean).length}/${Object.keys(d.integrations).length}`;
     });
 
     await check('maps', async () => {
@@ -136,6 +137,84 @@ async function main() {
       });
       if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
       return '401 as expected';
+    });
+
+    const playerReport = {
+      map: 'brookhaven',
+      serverId: 'smoke-server-001',
+      players: [{ userId: 123456789, x: 420, y: 240, heading: 90 }]
+    };
+
+    await check('players-ping', async () => {
+      const d = await json('/api/players/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-ubers-token': TEST_TRACKING_TOKEN },
+        body: JSON.stringify(playerReport)
+      });
+      if (!d.ok || d.accepted !== 1) throw new Error('player report was not accepted');
+      return `accepted ${d.accepted} anonymous position`;
+    });
+
+    await check('players-ping-rejects-bad-token', async () => {
+      const res = await fetch(`${BASE}/api/players/ping`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-ubers-token': 'wrong' },
+        body: JSON.stringify(playerReport)
+      });
+      if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
+      return '401 as expected';
+    });
+
+    await check('players-ping-validates-coordinates', async () => {
+      const res = await fetch(`${BASE}/api/players/ping`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-ubers-token': TEST_TRACKING_TOKEN },
+        body: JSON.stringify({ ...playerReport, players: [{ userId: 22, x: 1100, y: 200 }] })
+      });
+      if (res.status !== 400) throw new Error(`expected 400, got ${res.status}`);
+      return 'out-of-map positions rejected';
+    });
+
+    await check('players-snapshot-is-anonymous-and-map-scoped', async () => {
+      const d = await json('/api/players?map=brookhaven');
+      if (d.players.length !== 1 || d.activeServers !== 1) throw new Error('live position missing');
+      const serialized = JSON.stringify(d);
+      if (serialized.includes('123456789') || serialized.includes('smoke-server-001')) {
+        throw new Error('response exposed a Roblox user or server ID');
+      }
+      if (d.players[0].x !== 420 || d.players[0].y !== 240) throw new Error('wrong live position');
+      const otherMap = await json('/api/players?map=bloxburg');
+      if (otherMap.players.length) throw new Error('Brookhaven player leaked into Bloxburg');
+      return 'anonymous position returned only on its configured map';
+    });
+
+    await check('players-empty-server-clears-snapshot', async () => {
+      await json('/api/players/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-ubers-token': TEST_TRACKING_TOKEN },
+        body: JSON.stringify({ ...playerReport, players: [] })
+      });
+      const d = await json('/api/players?map=brookhaven');
+      if (d.players.length || d.activeServers) throw new Error('departed players remained in the snapshot');
+      return 'empty roster clears the game server immediately';
+    });
+
+    await check('players-reports-expire-after-ttl', async () => {
+      const now = Date.now;
+      try {
+        Date.now = () => 1000;
+        playerTracker.reportFromRoblox({
+          map: 'bloxburg',
+          serverId: 'ttl-test-server',
+          players: [{ userId: 99887766, x: 100, y: 200 }]
+        }, TEST_TRACKING_TOKEN);
+        if (playerTracker.snapshot('bloxburg').players.length !== 1) throw new Error('fresh report missing');
+        Date.now = () => 1001 + playerTracker.PLAYER_TTL_MS;
+        if (playerTracker.snapshot('bloxburg').players.length) throw new Error('stale report was not removed');
+      } finally {
+        Date.now = now;
+      }
+      return `${playerTracker.PLAYER_TTL_MS / 1000}s heartbeat expiry verified`;
     });
 
     await check('stripe-plans', async () => {

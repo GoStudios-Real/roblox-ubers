@@ -7,6 +7,9 @@ const state = {
   maps: {},
   mapId: 'brookhaven',
   vehicles: [],
+  players: [],
+  playerServers: 0,
+  playerDemo: false,
   filter: 'all',
   search: '',
   selected: null,
@@ -48,6 +51,11 @@ async function staticApi(path, opts = {}) {
     const mapId = url.searchParams.get('map');
     const filtered = vehicles.filter((v) => !mapId || v.map === mapId);
     return { vehicles: filtered, stats: statsFor(filtered), time: Date.now() };
+  }
+  if (url.pathname.endsWith('/api/players') && method === 'GET') {
+    const mapId = url.searchParams.get('map');
+    const filtered = (window.UBERS_STATIC_DATA.players || []).filter((p) => !mapId || p.map === mapId);
+    return { players: filtered, activeServers: 0, updatedAt: Date.now(), demo: true };
   }
   if (url.pathname.endsWith('/api/health') && method === 'GET') {
     return { ok: true, name: 'ROBLOX UBERS', integrations: { openrouter: false, stripe: false, robloxApiKey: false, trackingToken: false }, staticMode: true };
@@ -182,6 +190,7 @@ function renderMap() {
   });
   svg.appendChild(pois);
   svg.appendChild(el('g', { id: 'vehicleLayer' }));
+  svg.appendChild(el('g', { id: 'playerLayer' }));
 
   $('#mapLegend').innerHTML =
     `<span><b>${map.name}</b></span>` +
@@ -189,6 +198,7 @@ function renderMap() {
     `<span>${map.routes.length} routes</span><span>${map.pois.length} POIs</span>`;
 
   drawVehicles();
+  drawPlayers();
 }
 
 function catColor(cat) {
@@ -248,6 +258,23 @@ function drawVehicles() {
   renderList();
 }
 
+function drawPlayers() {
+  const layer = $('#playerLayer');
+  if (!layer) return;
+  layer.innerHTML = '';
+  const players = state.players.filter((p) => p.map === state.mapId);
+  players.forEach((p, i) => {
+    const dot = el('g', {
+      class: 'player-dot',
+      transform: `translate(${p.x},${p.y})`,
+      'aria-label': `Anonymous player ${i + 1}`
+    });
+    dot.appendChild(el('circle', { class: 'halo', r: 13 }));
+    dot.appendChild(el('circle', { class: 'core', r: 5 }));
+    layer.appendChild(dot);
+  });
+}
+
 function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
 
 function renderList() {
@@ -267,7 +294,34 @@ function renderList() {
   });
   const s = state.vehicles.filter((v) => v.map === state.mapId && matches(v));
   const by = (t) => s.filter((v) => v.type === t).length;
-  $('#mapStats').textContent = `${by('car')} cars · ${by('bus')} buses · ${by('taxi')} taxis · updated ${new Date().toLocaleTimeString()}`;
+  const players = state.players.filter((p) => p.map === state.mapId);
+  const playerLabel = state.playerDemo ? `${players.length} demo players` : `${players.length} live players · ${state.playerServers} servers`;
+  $('#mapStats').textContent = `${by('car')} cars · ${by('bus')} buses · ${by('taxi')} taxis · ${playerLabel} · updated ${new Date().toLocaleTimeString()}`;
+  renderPlayers();
+}
+
+function renderPlayers() {
+  const players = state.players.filter((p) => p.map === state.mapId);
+  $('#playerCount').textContent = players.length;
+  $('#playerList').replaceChildren();
+  players.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'player-row';
+    const name = document.createElement('span');
+    name.textContent = `${state.playerDemo ? 'Demo' : 'Anonymous'} player ${String(i + 1).padStart(2, '0')}`;
+    const position = document.createElement('b');
+    position.textContent = `${Math.round(p.x)}, ${Math.round(p.y)}`;
+    row.append(name, position);
+    $('#playerList').appendChild(row);
+  });
+  const status = $('#playerStatus');
+  if (state.playerDemo) {
+    status.textContent = 'Demo positions · no live Roblox data';
+  } else if (players.length) {
+    status.textContent = `LIVE · ${state.playerServers} connected game server${state.playerServers === 1 ? '' : 's'} · refreshes every 2s`;
+  } else {
+    status.textContent = 'Waiting for a connected Roblox game server.';
+  }
 }
 
 function selectVehicle(id) {
@@ -318,6 +372,26 @@ async function pollTracking() {
   } catch (e) {
     $('#pillLive').textContent = '● OFFLINE';
     $('#pillLive').classList.remove('live');
+  }
+  await pollPlayers();
+}
+
+async function pollPlayers() {
+  try {
+    const data = await api(`/api/players?map=${state.mapId}`);
+    state.players = data.players.map((p) => ({ ...p, map: state.mapId }));
+    state.playerServers = data.activeServers || 0;
+    state.playerDemo = Boolean(data.demo);
+    drawPlayers();
+    renderPlayers();
+    $('#pillPlayers').textContent = state.playerDemo
+      ? '● DEMO PLAYERS'
+      : state.players.length ? `● ${state.players.length} PLAYERS` : '● WAITING FOR ROBLOX';
+    $('#pillPlayers').classList.toggle('live', !state.playerDemo && state.players.length > 0);
+  } catch (e) {
+    $('#playerStatus').textContent = `Player feed unavailable: ${e.message}`;
+    $('#pillPlayers').textContent = '● PLAYER FEED ERROR';
+    $('#pillPlayers').classList.remove('live');
   }
 }
 
@@ -502,7 +576,7 @@ async function boot() {
     $('#view-wifi .hero p').textContent = 'Explore demo hotspots and create a local demo code. This static site does not provide an internet connection.';
     $('#view-premium .hero p').textContent = 'Premium plans are shown for preview. Stripe checkout requires the Windows app and a configured server.';
     $('#view-ai .chat-head h3').textContent = 'AI Support (Windows app required)';
-    $('#view-integrate .hero p').textContent = 'GitHub Pages cannot receive Roblox game callbacks. Live vehicle reporting needs a publicly reachable server with the Roblox tracker configured.';
+    $('#view-integrate .hero p').textContent = 'GitHub Pages cannot receive Roblox game callbacks. Live player positions need your own publicly reachable server and the Roblox tracker installed in a game you own.';
     addMsg('This GitHub Pages site is a static demo. AI chat needs the Windows app and a configured OpenRouter API key.', 'err');
   }
   try {
