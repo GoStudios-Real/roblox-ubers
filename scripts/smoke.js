@@ -505,6 +505,24 @@ async function main() {
       }
       return 'old backend APIs cannot re-enable third-party fallback behavior';
     });
+
+    await check('roblox-notepad-download-links', async () => {
+      const html = await fetch(`${BASE}/`).then((response) => response.text());
+      const scripts = [
+        'UBERS_FakeTown_Starter.server.txt',
+        'UBERS_Dispatch.server.txt',
+        'UBERS_VehicleTracker.server.txt'
+      ];
+      if (!html.includes('Roblox scripts for Notepad') || !html.includes('Change the <code>.txt</code> extension to <code>.lua</code>')) {
+        throw new Error('Notepad download instructions are missing');
+      }
+      for (const script of scripts) {
+        if (!html.includes(`./downloads/${script}`)) {
+          throw new Error(`Notepad download link is missing ${script}`);
+        }
+      }
+      return 'starter, dispatch, and tracker scripts are linked as Notepad-friendly text files';
+    });
   } finally {
     child.kill();
     fs.rmSync(TEST_DATA_DIRECTORY, { recursive: true, force: true });
