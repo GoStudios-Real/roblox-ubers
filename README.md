@@ -19,7 +19,8 @@ An Uber-inspired app with **real human drivers** for Roblox. Every map is **gene
 | 🔌 Roblox script | `roblox/UBERS_VehicleTracker.server.lua` — reports anonymous player positions and tagged vehicles from your own experience |
 | 🗓️ Timetables | 30-minute departures on configured map routes, shown in the visitor's local time |
 | 🎟️ Ride bookings | Persistent seat reservations, route capacity checks, private booking references, secure management keys, lookup and cancellation |
-| 🧑‍✈️ Drive jobs | Real players claim open bookings on the Drive tab, get a private hashed driver code, and post live ride statuses (on the way → at pickup → picked up → completed) that update the rider's booking bar |
+| 🧑‍✈️ Drive jobs | Real players sign in, claim open bookings on the Drive tab, and advance each ride with a **Next** button (on the way → at pickup → picked up → ride completed) that updates the rider's booking bar live |
+| 🪪 Driver & rider accounts | Sign up / sign in on the Drive tab (salted scrypt password hashes, 30-day hashed session tokens); claimed rides follow the account across browsers, with a private hashed driver code as backup |
 | 🔊 Sound effects | Original synthesized interface tones for navigation and notifications, with a saved opt-in sound toggle |
 | 🚘 Owner-run driver scripts | Dispatches a configured vehicle in an experience whose owner installs `roblox/UBERS_Dispatch.server.lua` |
 | ❔ Help & terms | In-app FAQ, terms, privacy details, trademark notices, and a © 2026 notice |
@@ -91,7 +92,7 @@ Install and configure `roblox/UBERS_Dispatch.server.lua` in your experience's `S
 
 ### Driver jobs (real players, no bots)
 
-Third-party experiences such as Brookhaven RP cannot be scripted from outside — a "bot" driving there would require a script executor, which violates Roblox's terms and risks permanent bans and malware. Driver jobs are the legitimate alternative: open the **Drive** tab, claim an open booking, and you get a private driver code (SHA-256 hash stored; shown once; kept in the browser's local storage). Join the game with the join button, meet the rider at the pickup stop with a car, taxi or bus, and advance the status buttons. The rider's booking page polls every 15 seconds, so the rider's Ride tracking bar reflects your progress live. Claimed rides are locked out of the owner dispatcher and other drivers; releasing returns the job to the open list. The public Roblox API cannot place driver and rider into one specific server, so both sides should pick the same public server from the Roblox API tab.
+Third-party experiences such as Brookhaven RP cannot be scripted from outside — a "bot" driving there would require a script executor, which violates Roblox's terms and risks permanent bans and malware. Driver jobs are the legitimate alternative: open the **Drive** tab, sign in or create an account, claim an open booking (a private hashed driver code is also issued as a backup credential), and join the game with the join button. Meet the rider at the pickup stop with a car, taxi or bus and press **Next** as you go — on the way → at pickup → picked up → ride completed. Claimed rides appear under **My driver jobs** with a mini route map and live tracking bar, and the account's claimed jobs follow you on any browser. The rider's booking page polls every 15 seconds, so the rider's Ride tracking bar reflects your progress live. Claimed rides are locked out of the owner dispatcher and other drivers; releasing returns the job to the open list. A **Drivers map** on the Drive tab plots each open ride's pickup stop and jumps you to that job. The public Roblox API cannot place driver and rider into one specific server, so both sides should pick the same public server from the Roblox API tab.
 
 ### Stripe Premium setup
 
@@ -138,10 +139,15 @@ keep it only in the server's private environment.
 | POST | `/api/bookings/:reference/profile` | Attach a public Roblox profile to a future scheduled ride (`manageKey` in request body) |
 | DELETE | `/api/bookings/:reference` | Cancel a future booking (`manageKey` in request body) |
 | GET | `/api/jobs?map=game-90010001` | Open driver jobs (bookings without a driver; no secrets) |
-| POST | `/api/jobs/:reference/claim` | Claim a job as driver; returns private `driverCode` (64-hex, shown once) |
+| POST | `/api/auth/signup` | Create a driver/rider account; returns a private session token (64-hex, shown once) |
+| POST | `/api/auth/signin` | Sign in; returns a private session token sent as `x-ubers-auth` |
+| POST | `/api/auth/signout` | End the current session (`x-ubers-auth` in headers) |
+| GET | `/api/auth/me` | Signed-in account with its driver jobs and bookings (`x-ubers-auth`) |
+| GET | `/api/jobs/mine` | Driver jobs claimed by the signed-in account (`x-ubers-auth`) |
+| POST | `/api/jobs/:reference/claim` | Claim a ride as driver (sign-in required); returns private `driverCode` (64-hex, shown once) |
 | GET | `/api/jobs/driver?code=...` | Driver's claimed job (`driverCode` in query) |
-| POST | `/api/jobs/:reference/status` | Driver status update: `claimed → enroute → arrived → picked_up → completed` or `failed` (`driverCode` + `status` in body) |
-| POST | `/api/jobs/:reference/release` | Release a claimed job back to the open list (`driverCode` in body) |
+| POST | `/api/jobs/:reference/status` | Driver status update: `claimed → enroute → arrived → picked_up → completed` or `failed` (`driverCode` or `x-ubers-auth` + `status` in body) |
+| POST | `/api/jobs/:reference/release` | Release a claimed job back to the open list (`driverCode` or `x-ubers-auth` in body) |
 | GET | `/api/roblox/dispatch/next?map=game-90010001` | Owner-installed game server checks for a due ride (tracking token required) |
 | POST | `/api/roblox/dispatch/claim` · `/api/roblox/dispatch/:reference/status` | Claim a ride and update its dispatch state (tracking token required) |
 | GET | `/api/tracking?map=game-90010001` | Live vehicle positions |

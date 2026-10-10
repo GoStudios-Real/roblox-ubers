@@ -41,6 +41,23 @@ function activeApiBase() {
   }
 }
 
+function authToken() {
+  try {
+    return localStorage.getItem('ubersAuth') || '';
+  } catch {
+    return '';
+  }
+}
+
+function setAuthToken(token) {
+  try {
+    if (token) localStorage.setItem('ubersAuth', token);
+    else localStorage.removeItem('ubersAuth');
+  } catch {
+    // storage unavailable; session simply will not persist
+  }
+}
+
 async function api(path, opts = {}) {
   const apiBase = activeApiBase();
   if (window.UBERS_STATIC_MODE && !apiBase) return staticApi(path, opts);
@@ -57,15 +74,25 @@ async function api(path, opts = {}) {
       });
   }
   if (window.UBERS_STATIC_MODE) await apiCompatibilityPromise;
+  const headers = { 'Content-Type': 'application/json', ...tunnelHeaders };
+  const token = authToken();
+  if (token) headers['x-ubers-auth'] = token;
+  Object.assign(headers, opts.headers || {});
   const res = await fetch(`${apiBase}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...tunnelHeaders },
     ...opts,
+    headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401 && path !== '/api/auth/me' && path !== '/api/auth/signin' && path !== '/api/auth/signup') {
+      setAuthToken('');
+      currentAccount = null;
+      renderAccountPanel();
+    }
     const error = new Error(data.error || `Request failed (${res.status})`);
     error.setupRequired = Boolean(data.setupRequired);
+    error.status = res.status;
     throw error;
   }
   return data;
@@ -1570,6 +1597,140 @@ $('#keyCheckBtn').addEventListener('click', async () => {
 // ---------- Drive tab: real-player driver jobs ----------
 let jobsRefreshTimer = null;
 let pendingClaimReference = null;
+let currentAccount = null;
+
+// ---------- Accounts: sign in / sign up ----------
+async function refreshAccount() {
+  if (!authToken()) {
+    currentAccount = null;
+    renderAccountPanel();
+    return;
+  }
+  try {
+    const data = await api('/api/auth/me');
+    currentAccount = data.account;
+    renderAccountPanel();
+    await refreshDriverJobs();
+  } catch {
+    setAuthToken('');
+    currentAccount = null;
+    renderAccountPanel();
+  }
+}
+
+function renderAccountPanel() {
+  const body = $('#accountBody');
+  const badge = $('#accountBadge');
+  if (!body) return;
+  if (badge) badge.textContent = currentAccount ? 'SIGNED IN' : 'SIGNED OUT';
+  body.replaceChildren();
+  if (currentAccount) {
+    const greeting = document.createElement('p');
+    greeting.innerHTML = '';
+    const name = document.createElement('b');
+    name.textContent = currentAccount.displayName || currentAccount.username;
+    greeting.append('Signed in as ', name, ` (@${currentAccount.username}). Sign in syncs your claimed rides on any browser.`);
+    const signOut = document.createElement('button');
+    signOut.type = 'button';
+    signOut.className = 'btn ghost';
+    signOut.textContent = 'Sign out';
+    signOut.addEventListener('click', async () => {
+      try {
+        await api('/api/auth/signout', { method: 'POST', body: {} });
+      } catch {
+        // local session is cleared even if the server call fails
+      }
+      setAuthToken('');
+      currentAccount = null;
+      renderAccountPanel();
+      await refreshDriverJobs();
+      toast('Signed out.');
+    });
+    body.append(greeting, signOut);
+    return;
+  }
+
+  const tabs = document.createElement('div');
+  tabs.className = 'seg auth-tabs';
+  const signInTab = document.createElement('button');
+  signInTab.type = 'button';
+  signInTab.className = 'chip active';
+  signInTab.textContent = 'Sign in';
+  const signUpTab = document.createElement('button');
+  signUpTab.type = 'button';
+  signUpTab.className = 'chip';
+  signUpTab.textContent = 'Sign up';
+  tabs.append(signInTab, signUpTab);
+
+  const form = document.createElement('form');
+  form.className = 'profile-form auth-form';
+  const usernameLabel = document.createElement('label');
+  usernameLabel.textContent = 'Username';
+  const username = document.createElement('input');
+  username.required = true;
+  username.minLength = 3;
+  username.maxLength = 20;
+  username.autocomplete = 'username';
+  username.pattern = '[A-Za-z0-9_]{3,20}';
+  username.placeholder = 'driver_username';
+  usernameLabel.appendChild(username);
+  const passwordLabel = document.createElement('label');
+  passwordLabel.textContent = 'Password';
+  const password = document.createElement('input');
+  password.type = 'password';
+  password.required = true;
+  password.minLength = 8;
+  password.maxLength = 100;
+  password.autocomplete = 'current-password';
+  password.placeholder = 'At least 8 characters';
+  passwordLabel.appendChild(password);
+  const displayLabel = document.createElement('label');
+  displayLabel.textContent = 'Display name (sign up only)';
+  const displayName = document.createElement('input');
+  displayName.maxLength = 24;
+  displayName.autocomplete = 'nickname';
+  displayName.placeholder = 'How riders see you';
+  displayLabel.appendChild(displayName);
+  const submit = document.createElement('button');
+  submit.type = 'submit';
+  submit.className = 'btn';
+  submit.textContent = 'Sign in';
+  const hint = document.createElement('p');
+  hint.className = 'field-hint';
+  hint.textContent = 'Accounts are stored on this UBERS server only. Passwords are salted and hashed — never shared with Roblox.';
+  form.append(usernameLabel, passwordLabel, displayLabel, submit, hint);
+  displayLabel.hidden = true;
+
+  let mode = 'signin';
+  const setMode = (next) => {
+    mode = next;
+    signInTab.classList.toggle('active', mode === 'signin');
+    signUpTab.classList.toggle('active', mode === 'signup');
+    displayLabel.hidden = mode !== 'signup';
+    password.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+    submit.textContent = mode === 'signup' ? 'Create account' : 'Sign in';
+  };
+  signInTab.addEventListener('click', () => setMode('signin'));
+  signUpTab.addEventListener('click', () => setMode('signup'));
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const path = mode === 'signup' ? '/api/auth/signup' : '/api/auth/signin';
+      const body = { username: username.value, password: password.value };
+      if (mode === 'signup' && displayName.value.trim()) body.displayName = displayName.value.trim();
+      const result = await api(path, { method: 'POST', body });
+      setAuthToken(result.token);
+      currentAccount = result.account;
+      renderAccountPanel();
+      await refreshDriverJobs();
+      toast(mode === 'signup' ? 'Account created — you can claim rides now.' : 'Signed in.');
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+  body.append(tabs, form);
+}
 
 function savedDriverJobs() {
   try {
@@ -1601,6 +1762,7 @@ async function refreshJobList() {
     const data = await api('/api/jobs');
     const jobs = data.jobs || [];
     if ($('#jobCount')) $('#jobCount').textContent = String(jobs.length);
+    renderDriversMap(jobs);
     list.replaceChildren();
     if (!jobs.length) {
       const empty = document.createElement('p');
@@ -1619,9 +1781,42 @@ async function refreshJobList() {
   }
 }
 
+function routeMapSvg(job, className) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 1000 1000');
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.setAttribute('class', className);
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', `${job.pickupName} to ${job.dropoffName} route`);
+  const grid = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  grid.setAttribute('width', '1000');
+  grid.setAttribute('height', '1000');
+  grid.setAttribute('class', 'route-map-bg');
+  svg.appendChild(grid);
+  if (Array.isArray(job.routeStops) && job.routeStops.length > 1) {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    line.setAttribute('points', job.routeStops.map(([x, y]) => `${x},${y}`).join(' '));
+    line.setAttribute('class', 'route-map-line');
+    svg.appendChild(line);
+  }
+  const addMarker = (point, cls) => {
+    if (!point) return;
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('cx', String(point.x));
+    dot.setAttribute('cy', String(point.y));
+    dot.setAttribute('r', '34');
+    dot.setAttribute('class', cls);
+    svg.appendChild(dot);
+  };
+  addMarker(job.dropoff, 'route-map-dropoff');
+  addMarker(job.pickup, 'route-map-pickup');
+  return svg;
+}
+
 function renderJobRow(job) {
   const row = document.createElement('div');
   row.className = 'saved-booking job-row';
+  row.id = `job-row-${job.reference}`;
   const info = document.createElement('div');
   info.className = 'job-row-info';
   const title = document.createElement('b');
@@ -1630,7 +1825,7 @@ function renderJobRow(job) {
   detail.className = 'muted';
   detail.textContent = `${job.pickupName} → ${job.dropoffName} · ${localDateTime(job.departureAt)} · ${job.seats} seat${job.seats === 1 ? '' : 's'} · rider: ${job.riderName}` +
     (job.riderRoblox ? ` (@${job.riderRoblox})` : '');
-  info.append(title, detail);
+  info.append(title, detail, routeMapSvg(job, 'job-route-map'));
   const actions = document.createElement('div');
   actions.className = 'job-row-actions';
   const join = document.createElement('a');
@@ -1641,7 +1836,7 @@ function renderJobRow(job) {
   const claim = document.createElement('button');
   claim.type = 'button';
   claim.className = 'btn';
-  claim.textContent = 'Claim job';
+  claim.textContent = 'Claim ride';
   claim.addEventListener('click', () => renderClaimForm(job));
   actions.append(join, claim);
   row.append(info, actions);
@@ -1653,6 +1848,27 @@ function renderClaimForm(job) {
   const panel = $('#jobClaimPanel');
   if (!panel) return;
   panel.replaceChildren();
+  if (!currentAccount) {
+    const card = document.createElement('div');
+    card.className = 'card lookup-form';
+    const heading = document.createElement('h3');
+    heading.textContent = `Sign in to claim ${job.reference}`;
+    const summary = document.createElement('p');
+    summary.className = 'muted';
+    summary.textContent = 'Driver accounts keep your claimed rides, tracking progress, and Next steps synced on any browser.';
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'btn';
+    go.textContent = 'Go to sign in / sign up';
+    go.addEventListener('click', () => {
+      $('#accountPanel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      $('#accountBody input')?.focus();
+    });
+    card.append(heading, summary, go);
+    panel.appendChild(card);
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
   const card = document.createElement('form');
   card.className = 'card lookup-form';
   const heading = document.createElement('h3');
@@ -1668,6 +1884,7 @@ function renderClaimForm(job) {
   nameInput.maxLength = 24;
   nameInput.autocomplete = 'off';
   nameInput.placeholder = 'e.g. TaxiKing42';
+  nameInput.value = currentAccount?.displayName || currentAccount?.username || '';
   nameLabel.appendChild(nameInput);
   const userLabel = document.createElement('label');
   userLabel.textContent = 'Roblox username (optional)';
@@ -1682,7 +1899,7 @@ function renderClaimForm(job) {
   submit.textContent = 'Claim this ride';
   const hint = document.createElement('p');
   hint.className = 'field-hint';
-  hint.textContent = 'You will get a private driver code (shown once). Anyone with the code can update this ride — keep it secret.';
+  hint.textContent = 'The ride is linked to your account, and you also get a private backup driver code (shown once). Anyone with either credential can update this ride — keep them secret.';
   card.append(heading, summary, nameLabel, userLabel, submit, hint);
   card.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -1734,55 +1951,156 @@ function showDriverCode(job, driverCode) {
   panel.appendChild(card);
 }
 
+function renderDriversMap(jobs) {
+  const svg = $('#jobsMapSvg');
+  const legend = $('#jobsMapLegend');
+  if (!svg || !legend) return;
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  legend.replaceChildren();
+  const active = jobs.filter((job) => job.pickup);
+  const mapJobs = active.filter((job) => job.mapId === state.mapId);
+  const shown = mapJobs.length ? mapJobs : active;
+  if ($('#jobsMapCount')) $('#jobsMapCount').textContent = String(shown.length);
+  if (!shown.length) {
+    const line = document.createElement('p');
+    line.className = 'muted';
+    line.textContent = 'No open rides to plot yet.';
+    legend.appendChild(line);
+    return;
+  }
+  shown.forEach((job, index) => {
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    marker.setAttribute('cx', String(job.pickup.x));
+    marker.setAttribute('cy', String(job.pickup.y));
+    marker.setAttribute('r', '42');
+    marker.setAttribute('class', 'jobs-map-marker');
+    marker.setAttribute('tabindex', '0');
+    const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    title.textContent = `${job.reference} · ${job.pickupName}`;
+    marker.appendChild(title);
+    const jump = () => {
+      const row = document.getElementById(`job-row-${job.reference}`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.remove('job-row-flash');
+        void row.offsetWidth;
+        row.classList.add('job-row-flash');
+      }
+    };
+    marker.addEventListener('click', jump);
+    marker.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') jump();
+    });
+    svg.appendChild(marker);
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('x', String(job.pickup.x));
+    label.setAttribute('y', String(job.pickup.y + 14));
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('class', 'jobs-map-label');
+    label.textContent = String(index + 1);
+    svg.appendChild(label);
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'chip jobs-map-chip';
+    item.textContent = `${index + 1} · ${job.reference} · ${job.pickupName}`;
+    item.addEventListener('click', () => marker.dispatchEvent(new Event('click')));
+    legend.appendChild(item);
+  });
+}
+
 async function refreshDriverJobs() {
   const list = $('#driverJobList');
   if (!list) return;
-  const entries = savedDriverJobs();
-  if ($('#driverJobCount')) $('#driverJobCount').textContent = String(entries.length);
+  const entries = [];
+  const seen = new Set();
+  if (currentAccount) {
+    try {
+      const data = await api('/api/jobs/mine');
+      (data.jobs || []).forEach((job) => {
+        seen.add(job.reference);
+        entries.push({ reference: job.reference, job, credential: {}, saved: false });
+      });
+    } catch {
+      // account list unavailable; local driver codes still work
+    }
+  }
+  const stillSaved = [];
+  for (const saved of savedDriverJobs()) {
+    if (seen.has(saved.reference)) continue;
+    try {
+      const data = await api(`/api/jobs/driver?code=${encodeURIComponent(saved.code)}`);
+      if (!data.job) continue;
+      entries.push({ reference: saved.reference, job: data.job, credential: { driverCode: saved.code }, saved });
+      stillSaved.push(saved);
+    } catch {
+      // stale or unknown code; drop it
+    }
+  }
+  saveDriverJobs(stillSaved);
+  if ($('#driverJobCount')) $('#driverJobCount').textContent = String(entries.filter((entry) => entry.job).length);
+  list.replaceChildren();
   if (!entries.length) {
-    list.replaceChildren();
     const empty = document.createElement('p');
     empty.className = 'muted';
-    empty.textContent = 'No claimed jobs in this browser yet.';
+    empty.textContent = currentAccount
+      ? 'No claimed jobs for this account yet. Claim one from Open rides.'
+      : 'Sign in above, or claim a ride to see it tracked here.';
     list.appendChild(empty);
     return;
   }
-  const results = await Promise.all(entries.map(async (entry) => {
-    try {
-      const data = await api(`/api/jobs/driver?code=${encodeURIComponent(entry.code)}`);
-      return { entry, job: data.job };
-    } catch {
-      return { entry, job: null };
-    }
-  }));
-  const stillSaved = [];
-  list.replaceChildren();
-  results.forEach(({ entry, job }) => {
-    if (!job) return;
-    stillSaved.push(entry);
-    list.appendChild(renderDriverJobRow(entry, job));
-  });
-  if (stillSaved.length !== entries.length) saveDriverJobs(stillSaved);
-  if (!stillSaved.length) {
-    const empty = document.createElement('p');
-    empty.className = 'muted';
-    empty.textContent = 'No claimed jobs in this browser yet.';
-    list.appendChild(empty);
-  }
+  entries.forEach((entry) => list.appendChild(renderDriverJobRow(entry, entry.job)));
 }
 
 const DRIVER_ACTIONS = {
-  claimed: [{ status: 'enroute', label: '🚗 On the way' }, { release: true, label: 'Release job' }],
-  enroute: [{ status: 'arrived', label: '📍 At pickup' }, { status: 'failed', label: 'Fail job' }],
-  arrived: [{ status: 'picked_up', label: '👥 Picked up' }, { status: 'failed', label: 'Fail job' }],
-  picked_up: [{ status: 'completed', label: '✅ Ride completed' }, { status: 'failed', label: 'Fail job' }],
+  claimed: [{ next: 'enroute', label: 'Next · On the way' }, { release: true, label: 'Release' }],
+  enroute: [{ next: 'arrived', label: 'Next · At pickup' }, { fail: true, label: 'Fail ride' }],
+  arrived: [{ next: 'picked_up', label: 'Next · Picked up' }, { fail: true, label: 'Fail ride' }],
+  picked_up: [{ next: 'completed', label: 'Next · Ride completed' }, { fail: true, label: 'Fail ride' }],
   completed: [{ remove: true, label: 'Remove' }],
   failed: [{ release: true, label: 'Return to open list' }, { remove: true, label: 'Remove' }]
 };
 
+const TRACKING_STAGES = ['Booked', 'Driver assigned', 'On the way', 'At pickup', 'On ride', 'Complete'];
+const TRACKING_STAGE_INDEX = {
+  scheduled: 0,
+  profile_required: 0,
+  waiting: 0,
+  claimed: 1,
+  enroute: 2,
+  arrived: 3,
+  picked_up: 4,
+  completed: 5
+};
+
+function renderTrackingProgress(status, driverName) {
+  const wrap = document.createElement('div');
+  wrap.className = 'job-tracking';
+  const stageIndex = TRACKING_STAGE_INDEX[status] ?? 0;
+  const progress = document.createElement('div');
+  progress.className = 'ride-progress job-progress';
+  progress.setAttribute('role', 'progressbar');
+  progress.setAttribute('aria-valuemin', '0');
+  progress.setAttribute('aria-valuemax', '100');
+  progress.setAttribute('aria-valuenow', String(Math.round((stageIndex / (TRACKING_STAGES.length - 1)) * 100)));
+  progress.setAttribute('aria-valuetext', TRACKING_STAGES[stageIndex]);
+  const fill = document.createElement('span');
+  fill.className = 'ride-progress-fill';
+  fill.style.width = `${(stageIndex / (TRACKING_STAGES.length - 1)) * 100}%`;
+  progress.appendChild(fill);
+  const label = document.createElement('small');
+  label.className = 'muted job-tracking-label';
+  const nextStage = stageIndex < TRACKING_STAGES.length - 1 ? TRACKING_STAGES[stageIndex + 1] : null;
+  label.textContent = `Ride tracking: ${TRACKING_STAGES[stageIndex]}` +
+    (driverName ? ` · driven by ${driverName}` : '') +
+    (nextStage ? ` · next: ${nextStage}` : ' · ride finished');
+  wrap.append(progress, label);
+  return wrap;
+}
+
 function renderDriverJobRow(entry, job) {
   const row = document.createElement('div');
   row.className = 'saved-booking job-row';
+  row.id = `driver-job-row-${job.reference}`;
   const info = document.createElement('div');
   info.className = 'job-row-info';
   const title = document.createElement('b');
@@ -1791,7 +2109,7 @@ function renderDriverJobRow(entry, job) {
   detail.className = 'muted';
   detail.textContent = `${job.mapName} · ${job.pickupName} → ${job.dropoffName} · ${localDateTime(job.departureAt)} · rider: ${job.riderName}` +
     (job.riderRoblox ? ` (@${job.riderRoblox})` : '');
-  info.append(title, detail);
+  info.append(title, detail, routeMapSvg(job, 'job-route-map'), renderTrackingProgress(job.dispatchStatus, job.driver?.name));
   const actions = document.createElement('div');
   actions.className = 'job-row-actions';
   const join = document.createElement('a');
@@ -1802,26 +2120,31 @@ function renderDriverJobRow(entry, job) {
   (DRIVER_ACTIONS[job.dispatchStatus] || []).forEach((action) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = action.release || action.remove ? 'btn ghost' : 'btn';
+    button.className = action.release || action.remove || action.fail ? 'btn ghost' : 'btn';
     button.textContent = action.label;
     button.addEventListener('click', async () => {
       try {
-        if (action.status) {
+        if (action.next || action.fail) {
+          const status = action.next || 'failed';
           await api(`/api/jobs/${encodeURIComponent(job.reference)}/status`, {
             method: 'POST',
-            body: { driverCode: entry.code, status: action.status }
+            body: { ...entry.credential, status }
           });
+          if (action.next) playSound('tap');
         } else if (action.release) {
           await api(`/api/jobs/${encodeURIComponent(job.reference)}/release`, {
             method: 'POST',
-            body: { driverCode: entry.code }
+            body: { ...entry.credential }
           });
-          saveDriverJobs(savedDriverJobs().filter((saved) => saved.reference !== entry.reference));
-          toast('Job released back to the open list.');
+          if (entry.saved) {
+            saveDriverJobs(savedDriverJobs().filter((saved) => saved.reference !== entry.reference));
+          }
+          toast('Ride released back to the open list.');
         } else if (action.remove) {
           saveDriverJobs(savedDriverJobs().filter((saved) => saved.reference !== entry.reference));
         }
         await loadJobsView();
+        if (currentAccount) refreshAccount().catch(() => {});
       } catch (error) {
         toast(error.message);
       }
@@ -1865,6 +2188,7 @@ function activateView(name, wifiPreselect) {
 
 async function boot() {
   initializeApiConnection();
+  refreshAccount().catch(() => {});
   if (window.UBERS_STATIC_MODE && !activeApiBase()) {
     $('.brand-sub').textContent = 'ROBLOX · LIVE DATA NOT CONNECTED';
     $('#view-integrate .hero p').textContent = 'Configure your Cloudflare HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data and bookings.';

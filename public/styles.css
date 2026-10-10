@@ -317,6 +317,30 @@ table.api td:nth-child(2) { font-family: Consolas, monospace; color: var(--blue)
 .job-row-info small { text-align: left; white-space: normal; }
 .job-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 #jobClaimPanel .booking-card code.token { word-break: break-all; font-size: 11px; }
+.auth-tabs { width: fit-content; }
+.auth-form { display: flex; flex-direction: column; align-items: stretch; gap: 14px; }
+.auth-form label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.auth-form label[hidden] { display: none; }
+.auth-form .btn { align-self: flex-start; }
+.auth-form input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 13px; }
+.auth-form input:focus { outline: none; border-color: var(--accent); }
+.jobs-map { display: block; width: 100%; aspect-ratio: 1 / 1; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.jobs-map-marker { fill: var(--accent); stroke: #04121c; stroke-width: 8; cursor: pointer; transition: transform .15s ease; transform-origin: center; }
+.jobs-map-marker:hover, .jobs-map-marker:focus { transform: scale(1.18); outline: none; }
+.jobs-map-label { fill: #04121c; font-size: 46px; font-weight: 900; pointer-events: none; }
+.jobs-map-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.jobs-map-chip { font-size: 11px; padding: 4px 9px; cursor: pointer; }
+.route-map-bg { fill: var(--panel-2); stroke: var(--line); stroke-width: 6; }
+.route-map-line { fill: none; stroke: var(--blue); stroke-width: 16; stroke-linecap: round; stroke-linejoin: round; opacity: .65; }
+.route-map-pickup { fill: var(--accent); stroke: #04121c; stroke-width: 6; }
+.route-map-dropoff { fill: var(--green); stroke: #04121c; stroke-width: 6; }
+.job-route-map { width: 84px; height: 84px; flex: 0 0 84px; border: 1px solid var(--line); border-radius: 10px; margin-top: 4px; }
+.job-row { transition: box-shadow .2s ease; }
+.job-row-flash { box-shadow: 0 0 0 2px var(--accent); animation: job-flash 1.2s ease; }
+@keyframes job-flash { 0% { box-shadow: 0 0 0 4px var(--accent); } 100% { box-shadow: 0 0 0 2px var(--accent); } }
+.job-tracking { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; max-width: 340px; }
+.job-progress { margin: 0; }
+.job-tracking-label { text-align: left; }
 .booking-details { margin-top: 16px; }
 .booking-card { display: flex; flex-direction: column; gap: 8px; }
 .booking-card h3 { margin: 0; }

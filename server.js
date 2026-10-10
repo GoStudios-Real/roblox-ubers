@@ -14,6 +14,7 @@ const profileGames = require('./lib/profile-games');
 const fleet = require('./lib/fleet');
 const players = require('./lib/players');
 const bookings = require('./lib/bookings');
+const accounts = require('./lib/accounts');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -128,13 +129,97 @@ app.post('/api/bookings', (req, res) => {
     if (req.body?.robloxUsername) {
       profile = await resolveRobloxProfile(req.body.robloxUsername);
     }
-    return bookings.create(req.body, Date.now(), profile);
+    const account = sessionAccount(req);
+    return bookings.create(req.body, Date.now(), profile, account?.id || null);
   };
   createBooking().then((booking) => {
     h(res, 201, { booking });
   }).catch((error) => {
     h(res, error.statusCode || 502, { error: error.message });
   });
+});
+
+// ---------- Accounts: sign in / sign up for drivers and riders ----------
+const authHits = new Map();
+
+function allowAuthAttempt(req, res) {
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  if (authHits.size > 500) {
+    for (const [address, hits] of authHits) {
+      if (!hits.length || now - hits[hits.length - 1] >= 60000) authHits.delete(address);
+    }
+  }
+  const recent = (authHits.get(ip) || []).filter((time) => now - time < 60000);
+  if (recent.length >= 15) {
+    h(res, 429, { error: 'Too many sign-in attempts. Wait a minute and try again.' });
+    return false;
+  }
+  recent.push(now);
+  authHits.set(ip, recent);
+  return true;
+}
+
+function sessionAccount(req) {
+  const token = req.get('x-ubers-auth');
+  return token ? accounts.accountByToken(token) : null;
+}
+
+function requireSession(req, res) {
+  const account = sessionAccount(req);
+  if (!account) {
+    h(res, 401, { error: 'Sign in to continue.' });
+    return null;
+  }
+  return account;
+}
+
+function driverCredential(req) {
+  return {
+    driverCode: typeof req.body?.driverCode === 'string' ? req.body.driverCode : '',
+    accountId: sessionAccount(req)?.id || null
+  };
+}
+
+app.post('/api/auth/signup', (req, res) => {
+  if (!allowAuthAttempt(req, res)) return;
+  try {
+    const result = accounts.signUp(req.body);
+    h(res, 201, result);
+  } catch (error) {
+    h(res, error.statusCode || 400, { error: error.message });
+  }
+});
+
+app.post('/api/auth/signin', (req, res) => {
+  if (!allowAuthAttempt(req, res)) return;
+  try {
+    h(res, 200, accounts.signIn(req.body));
+  } catch (error) {
+    h(res, error.statusCode || 400, { error: error.message });
+  }
+});
+
+app.post('/api/auth/signout', (req, res) => {
+  try {
+    h(res, 200, accounts.signOut(req.get('x-ubers-auth')));
+  } catch (error) {
+    h(res, error.statusCode || 400, { error: error.message });
+  }
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const account = requireSession(req, res);
+  if (!account) return;
+  try {
+    h(res, 200, {
+      account,
+      jobs: bookings.listMine(account.id),
+      bookings: bookings.listMineBookings(account.id)
+    });
+  } catch (error) {
+    h(res, error.statusCode || 400, { error: error.message });
+  }
 });
 
 function authorizedRobloxServer(req, res) {
@@ -241,9 +326,22 @@ app.get('/api/jobs', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:reference/claim', (req, res) => {
+app.get('/api/jobs/mine', (req, res) => {
+  const account = requireSession(req, res);
+  if (!account) return;
   try {
-    const result = bookings.claimJob(String(req.params.reference || ''), req.body);
+    h(res, 200, { jobs: bookings.listMine(account.id) });
+  } catch (error) {
+    h(res, error.statusCode || 400, { error: error.message });
+  }
+});
+
+app.post('/api/jobs/:reference/claim', (req, res) => {
+  const account = requireSession(req, res);
+  if (!account) return;
+  try {
+    const payload = { ...req.body, displayName: account.displayName };
+    const result = bookings.claimJob(String(req.params.reference || ''), payload, account.id);
     h(res, 201, result);
   } catch (error) {
     h(res, error.statusCode || 400, { error: error.message });
@@ -259,7 +357,7 @@ app.post('/api/jobs/:reference/status', (req, res) => {
   try {
     const job = bookings.updateDriverStatus(
       String(req.params.reference || ''),
-      String(req.body?.driverCode || ''),
+      driverCredential(req),
       String(req.body?.status || '')
     );
     h(res, 200, { job });
@@ -270,7 +368,7 @@ app.post('/api/jobs/:reference/status', (req, res) => {
 
 app.post('/api/jobs/:reference/release', (req, res) => {
   try {
-    const job = bookings.releaseJob(String(req.params.reference || ''), String(req.body?.driverCode || ''));
+    const job = bookings.releaseJob(String(req.params.reference || ''), driverCredential(req));
     h(res, 200, { job });
   } catch (error) {
     h(res, error.statusCode || 400, { error: error.message });

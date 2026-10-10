@@ -1,7 +1,7 @@
 {
   "name": "roblox-ubers",
-  "version": "1.6.1",
-  "description": "ROBLOX UBERS - Roblox roleplay ride bookings, timetables, live game data and support",
+  "version": "1.7.0",
+  "description": "ROBLOX UBERS - Roblox ride bookings, timetables, live game data, driver accounts and real human driver jobs",
   "main": "server.js",
   "directories": {
     "doc": "docs",
@@ -10,7 +10,7 @@
   "scripts": {
     "test": "node scripts/smoke.js",
     "build:pages": "node scripts/build-pages.js",
-    "package:exe": "pkg server.js --public --targets node22.22.3-win-x64 --output dist/ROBLOX-UBERS-v1.6.1.exe",
+    "package:exe": "pkg server.js --public --targets node22.22.3-win-x64 --output dist/ROBLOX-UBERS-v1.7.0.exe",
     "start": "node server.js",
     "dev": "node --watch server.js",
     "always-online": "powershell -ExecutionPolicy Bypass -File scripts/always-online.ps1",

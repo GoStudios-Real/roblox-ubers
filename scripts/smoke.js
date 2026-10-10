@@ -359,25 +359,84 @@ async function main() {
       if (listed.placeId !== PLACE_A || listed.routeType !== 'taxi' || !listed.pickupName?.endsWith('Central Transit Hub')) {
         throw new Error(`open job is missing route or place details: placeId=${listed.placeId} routeType=${listed.routeType} pickupName=${listed.pickupName}`);
       }
+      if (!listed.pickup || !listed.dropoff || !Array.isArray(listed.routeStops)) {
+        throw new Error('open job is missing map coordinates or route stops for the driver map');
+      }
       const listedJson = JSON.stringify(open);
       if (listedJson.includes(manageKey) || listedJson.includes('codeHash') || listedJson.includes('driverCode')) {
         throw new Error('public job list leaked a secret');
       }
 
-      const badName = await fetch(`${BASE}/api/jobs/${reference}/claim`, {
+      const anonClaim = await fetch(`${BASE}/api/jobs/${reference}/claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driverName: 'Taxi Driver' })
+      });
+      if (anonClaim.status !== 401) throw new Error(`anonymous claim returned ${anonClaim.status} instead of 401`);
+
+      const shortUser = await fetch(`${BASE}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'ab', password: 'long-enough-password' })
+      });
+      if (shortUser.status !== 400) throw new Error(`short signup username returned ${shortUser.status}`);
+      const weakPass = await fetch(`${BASE}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'smoke_driver1', password: 'short' })
+      });
+      if (weakPass.status !== 400) throw new Error(`weak signup password returned ${weakPass.status}`);
+
+      const signedUp = await json('/api/auth/signup', {
+        method: 'POST',
+        body: { username: 'smoke_driver1', password: 'smoke-secret-123', displayName: 'Taxi Driver' }
+      });
+      if (!/^[a-f0-9]{64}$/.test(signedUp.token)) throw new Error('sign-up did not return a private 64-hex token');
+      if (signedUp.account?.username !== 'smoke_driver1' || signedUp.account?.displayName !== 'Taxi Driver') {
+        throw new Error('sign-up account payload is wrong');
+      }
+      if (JSON.stringify(signedUp).includes('hash') || JSON.stringify(signedUp).includes('salt')) {
+        throw new Error('sign-up leaked password material');
+      }
+      const duplicateUser = await fetch(`${BASE}/api/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'SMOKE_DRIVER1', password: 'smoke-secret-123' })
+      });
+      if (duplicateUser.status !== 409) throw new Error(`duplicate signup returned ${duplicateUser.status}`);
+      const wrongPass = await fetch(`${BASE}/api/auth/signin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'smoke_driver1', password: 'not-the-password' })
+      });
+      if (wrongPass.status !== 401) throw new Error(`wrong password returned ${wrongPass.status}`);
+      const signedIn = await json('/api/auth/signin', {
+        method: 'POST',
+        body: { username: 'smoke_driver1', password: 'smoke-secret-123' }
+      });
+      const session = { 'x-ubers-auth': signedIn.token };
+
+      const meAnon = await fetch(`${BASE}/api/auth/me`);
+      if (meAnon.status !== 401) throw new Error(`anonymous /api/auth/me returned ${meAnon.status}`);
+
+      const badName = await fetch(`${BASE}/api/jobs/${reference}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-ubers-auth': signedIn.token },
         body: JSON.stringify({ driverName: 'x' })
       });
       if (badName.status !== 400) throw new Error(`invalid driver name returned ${badName.status}`);
 
       const claimed = await json(`/api/jobs/${reference}/claim`, {
         method: 'POST',
+        headers: session,
         body: { driverName: 'Taxi Driver', driverUsername: 'driver_user1' }
       });
       if (!/^[a-f0-9]{64}$/.test(claimed.driverCode)) throw new Error('driver code was not a private 64-hex secret');
       if (claimed.job.dispatchStatus !== 'claimed' || claimed.job.driver?.name !== 'Taxi Driver') {
         throw new Error('claim did not assign the driver');
+      }
+      if ('accountId' in (claimed.job.driver || {}) || JSON.stringify(claimed.job).includes(signedIn.account.id)) {
+        throw new Error('public job view leaked the account id');
       }
 
       const afterClaim = await json(`/api/jobs?map=${MAP_A}`);
@@ -386,16 +445,49 @@ async function main() {
       }
       const duplicate = await fetch(`${BASE}/api/jobs/${reference}/claim`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-ubers-auth': signedIn.token },
         body: JSON.stringify({ driverName: 'Second Driver' })
       });
       if (duplicate.status !== 409) throw new Error(`double claim returned ${duplicate.status}`);
 
-      const deniedDriver = await fetch(`${BASE}/api/jobs/driver?code=${'a'.repeat(64)}`);
-      if (deniedDriver.status !== 404) throw new Error(`unknown driver code returned ${deniedDriver.status}`);
       const mine = await json(`/api/jobs/driver?code=${claimed.driverCode}`);
       if (mine.job.reference !== reference || mine.job.dispatchStatus !== 'claimed') {
         throw new Error('driver code did not resolve the claimed job');
+      }
+      const deniedDriver = await fetch(`${BASE}/api/jobs/driver?code=${'a'.repeat(64)}`);
+      if (deniedDriver.status !== 404) throw new Error(`unknown driver code returned ${deniedDriver.status}`);
+
+      const accountJobs = await json('/api/jobs/mine', { headers: session });
+      if (!(accountJobs.jobs || []).some((job) => job.reference === reference)) {
+        throw new Error('/api/jobs/mine did not list the claimed ride for the account');
+      }
+      const mineAnon = await fetch(`${BASE}/api/jobs/mine`);
+      if (mineAnon.status !== 401) throw new Error(`anonymous /api/jobs/mine returned ${mineAnon.status}`);
+
+      const second = await json('/api/bookings', {
+        method: 'POST',
+        headers: session,
+        body: {
+          mapId: MAP_A,
+          routeId: 'c1',
+          pickupPoiId: POI_PICKUP,
+          dropoffPoiId: POI_DROPOFF,
+          departureAt: slot,
+          seats: 1,
+          riderName: 'Job Rider 2'
+        }
+      });
+      const me = await json('/api/auth/me', { headers: session });
+      if (me.account?.username !== 'smoke_driver1') throw new Error('/api/auth/me did not return the session account');
+      if (!(me.bookings || []).some((booking) => booking.reference === second.booking.reference)) {
+        throw new Error('/api/auth/me did not return the session-created booking');
+      }
+      const secondClaim = await json(`/api/jobs/${second.booking.reference}/claim`, {
+        method: 'POST',
+        headers: session
+      });
+      if (secondClaim.job.driver?.name !== 'Taxi Driver') {
+        throw new Error('claim without a driver name did not fall back to the account display name');
       }
 
       const npcClaim = await fetch(`${BASE}/api/roblox/dispatch/claim`, {
@@ -408,12 +500,18 @@ async function main() {
         throw new Error(`NPC dispatcher returned ${npcClaim.status} (${npcBody.error || ''}) for a website-driver ride`);
       }
 
-      for (const status of ['enroute', 'arrived', 'picked_up', 'completed']) {
+      const codeStep = await json(`/api/jobs/${reference}/status`, {
+        method: 'POST',
+        body: { driverCode: claimed.driverCode, status: 'enroute' }
+      });
+      if (codeStep.job.dispatchStatus !== 'enroute') throw new Error('driver-code status step did not advance');
+      for (const status of ['arrived', 'picked_up', 'completed']) {
         const step = await json(`/api/jobs/${reference}/status`, {
           method: 'POST',
-          body: { driverCode: claimed.driverCode, status }
+          headers: session,
+          body: { status }
         });
-        if (step.job.dispatchStatus !== status) throw new Error(`driver status did not advance to ${status}`);
+        if (step.job.dispatchStatus !== status) throw new Error(`account session did not advance status to ${status}`);
       }
       const wrongStatus = await fetch(`${BASE}/api/jobs/${reference}/status`, {
         method: 'POST',
@@ -421,6 +519,13 @@ async function main() {
         body: JSON.stringify({ driverCode: 'b'.repeat(64), status: 'completed' })
       });
       if (wrongStatus.status !== 404) throw new Error(`forged driver code returned ${wrongStatus.status}`);
+      const noCredential = await fetch(`${BASE}/api/jobs/${reference}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'completed' })
+      });
+      if (noCredential.status !== 404) throw new Error(`credential-less status returned ${noCredential.status}`);
+
       const riderView = await json(`/api/bookings/${reference}/lookup`, {
         method: 'POST',
         body: { manageKey }
@@ -429,25 +534,9 @@ async function main() {
         throw new Error('rider booking bar did not receive the live driver status');
       }
 
-      const second = await json('/api/bookings', {
-        method: 'POST',
-        body: {
-          mapId: MAP_A,
-          routeId: 'c1',
-          pickupPoiId: POI_PICKUP,
-          dropoffPoiId: POI_DROPOFF,
-          departureAt: slot,
-          seats: 2,
-          riderName: 'Job Rider 2'
-        }
-      });
-      const secondClaim = await json(`/api/jobs/${second.booking.reference}/claim`, {
-        method: 'POST',
-        body: { driverName: 'Bus Driver' }
-      });
       const released = await json(`/api/jobs/${second.booking.reference}/release`, {
         method: 'POST',
-        body: { driverCode: secondClaim.driverCode }
+        headers: session
       });
       if (released.job.dispatchStatus !== 'scheduled' || released.job.driver) {
         throw new Error('released job did not return to the open list');
@@ -456,7 +545,39 @@ async function main() {
       if (!(reopened.jobs || []).some((job) => job.reference === second.booking.reference)) {
         throw new Error('released job is not open for other drivers again');
       }
-      return 'claim, secret driver code, NPC conflict guard, live status chain and release verified';
+      const mineAfter = await json('/api/jobs/mine', { headers: session });
+      if ((mineAfter.jobs || []).some((job) => [reference, second.booking.reference].includes(job.reference))) {
+        throw new Error('released/completed rides still listed as active driver jobs');
+      }
+
+      const signedOut = await json('/api/auth/signout', {
+        method: 'POST',
+        headers: session,
+        body: {}
+      });
+      if (!signedOut.signedOut) throw new Error('sign-out did not confirm');
+      const meAfterSignout = await fetch(`${BASE}/api/auth/me`, { headers: session });
+      if (meAfterSignout.status !== 401) throw new Error(`sign-out token still valid (/api/auth/me ${meAfterSignout.status})`);
+
+      let limited = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const res = await fetch(`${BASE}/api/auth/signin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: 'smoke_driver1', password: 'smoke-secret-123' })
+        });
+        if (res.status === 429) {
+          const body = await res.json().catch(() => ({}));
+          if (!String(body.error || '').includes('Too many sign-in attempts')) {
+            throw new Error(`rate limiter returned 429 without a retry message: ${body.error || ''}`);
+          }
+          limited = true;
+          break;
+        }
+      }
+      if (!limited) throw new Error('auth rate limiter never kicked in after 20 sign-in attempts');
+
+      return 'account sign-up/in/out, session-scoped claim, secret driver code, NPC conflict guard, account status chain, release and rate limit verified';
     });
 
     await check('ai-chat', async () => {
@@ -605,7 +726,8 @@ async function main() {
       const res = await fetch(`${BASE}/#map`);
       const html = await res.text();
       for (const text of ['ROBLOX UBERS', 'bookingForm', 'soundToggle', 'view-faq', 'view-legal', '© 2026',
-        'view-jobs', 'jobList', 'driverJobList', 'Can bots spawn cars', '/api/jobs/:reference/claim']) {
+        'view-jobs', 'jobList', 'driverJobList', 'accountPanel', 'accountBody', 'driversMapCard', 'jobsMapSvg',
+        'jobsMapLegend', 'jobClaimPanel', 'Can bots spawn cars', '/api/jobs/:reference/claim', '/api/auth/signin']) {
         if (!html.includes(text)) throw new Error(`index is missing ${text}`);
       }
       for (const text of ['Real Human Drivers', 'GoStudios Of Roblox Transport']) {
@@ -646,6 +768,26 @@ async function main() {
         if (!styles.includes(text)) throw new Error(`booking tracker styles are missing ${text}`);
       }
       return 'local AM/PM times, accessible ride progress and live detail refresh are served';
+    });
+
+    await check('accounts-and-drivers-map-ui', async () => {
+      const html = await fetch(`${BASE}/`).then((response) => response.text());
+      const app = await fetch(`${BASE}/app.js`).then((response) => response.text());
+      const styles = await fetch(`${BASE}/styles.css`).then((response) => response.text());
+      for (const text of [
+        'authToken()', 'x-ubers-auth', '/api/auth/signup', '/api/auth/signin', '/api/auth/signout',
+        '/api/auth/me', '/api/jobs/mine', 'renderAccountPanel', 'renderDriversMap', 'Next ·',
+        "localStorage.getItem('ubersAuth')", 'Sign out', 'SIGNED IN', 'routeMapSvg'
+      ]) {
+        if (!app.includes(text)) throw new Error(`app.js is missing ${text}`);
+      }
+      for (const text of ['jobs-map-marker', 'job-route-map', 'job-tracking', 'auth-form', 'job-row-flash', 'jobs-map-legend']) {
+        if (!styles.includes(text)) throw new Error(`styles.css is missing ${text}`);
+      }
+      for (const text of ['Sign in / Sign up', 'Drivers map', 'My driver jobs', 'Open rides', 'SIGNED OUT']) {
+        if (!html.includes(text)) throw new Error(`index is missing ${text}`);
+      }
+      return 'account panel, session headers, drivers map and Next-driven tracking UI are served';
     });
 
     await check('static-site-requires-compatible-backend', async () => {
