@@ -19,7 +19,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run package:exe
-      - run: Copy-Item dist/ROBLOX-UBERS-v1.4.0.exe dist/ROBLOX-UBERS.exe
+      - shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist/ROBLOX-UBERS-v*.exe | Sort-Object Name -Descending | Select-Object -First 1
+          Copy-Item $exe.FullName dist/ROBLOX-UBERS.exe
       - uses: actions/upload-artifact@v4
         with:
           name: ROBLOX-UBERS-Windows
