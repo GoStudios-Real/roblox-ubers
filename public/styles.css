@@ -366,3 +366,24 @@ table.api td:nth-child(2) { font-family: Consolas, monospace; color: var(--blue)
   background: var(--panel-2); border: 1px solid var(--accent); color: var(--text);
   padding: 12px 20px; border-radius: 12px; box-shadow: var(--shadow); z-index: 100; font-size: 14px;
 }
+
+/* ---- profile games bar ---- */
+.profile-bar { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.profile-bar .profile-form { margin-top: 0; }
+.profile-bar .profile-form label { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.profile-games { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-games:empty { display: none; }
+.profile-head { display: flex; align-items: center; gap: 8px; width: 100%; font-size: 14px; }
+.profile-head img { width: 28px; height: 28px; border-radius: 50%; }
+.profile-head span { display: flex; gap: 8px; }
+.game-chip {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px;
+  color: var(--text); cursor: pointer; text-align: left;
+}
+.game-chip:hover { border-color: var(--blue); }
+.game-chip img { width: 26px; height: 26px; border-radius: 6px; }
+.game-chip b { display: block; font-size: 13px; }
+.game-chip small { color: var(--muted); }
+.seg-btn { display: inline-flex; align-items: center; gap: 6px; }
+.seg-icon { width: 18px; height: 18px; border-radius: 4px; }

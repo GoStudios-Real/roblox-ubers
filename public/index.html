@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ROBLOX UBERS - Book Roblox Roleplay Rides</title>
-  <meta name="description" content="Plan roleplay rides, book seats on scheduled Roblox game routes, and explore live game servers in Brookhaven and Bloxburg." />
+  <meta name="description" content="Plan roleplay rides, book seats on scheduled Roblox game routes, and explore live game servers from your Roblox profile's public games." />
   <link rel="stylesheet" href="./styles.css" />
   <link rel="icon" href="./assets/brand-icon.svg" type="image/svg+xml" />
 </head>
@@ -55,8 +55,7 @@
           <div class="form-grid">
             <label>Game
               <select id="rideMap" required>
-                <option value="brookhaven">Brookhaven RP</option>
-                <option value="bloxburg">Welcome to Bloxburg</option>
+                <option value="">Loading profile games…</option>
               </select>
             </label>
             <label>Service
@@ -95,12 +94,12 @@
           <div id="bookingProfileResult" class="profile-result" aria-live="polite"></div>
           <div id="timetableList" class="timetable-list" aria-live="polite"></div>
           <button class="btn booking-submit" id="bookingSubmit" type="submit">Reserve this roleplay ride</button>
-          <p class="muted booking-note">Add your public Roblox username to request an NPC driver. The driver can only run in an owner-controlled Roblox experience that has installed the UBERS server script. Brookhaven RP and Welcome to Bloxburg are third-party games; UBERS cannot add bots or drive vehicles in their servers.</p>
+          <p class="muted booking-note">Add your public Roblox username to request an NPC driver. The driver can only run in an owner-controlled Roblox experience that has installed the UBERS server script. Third-party games like Brookhaven RP cannot be driven by UBERS.</p>
           <div id="bookingResult" class="booking-result" role="status" hidden></div>
         </form>
         <aside class="card ride-benefits">
           <h3>Made for game nights</h3>
-          <div class="benefit"><span>01</span><div><b>Pick a route</b><p>Explore mapped stops in Brookhaven and Bloxburg.</p></div></div>
+          <div class="benefit"><span>01</span><div><b>Pick a route</b><p>Every public Roblox profile game becomes a mapped route.</p></div></div>
           <div class="benefit"><span>02</span><div><b>Save your seats</b><p>Capacity is shared per route and departure time.</p></div></div>
           <div class="benefit"><span>03</span><div><b>Keep your reference</b><p>Manage or cancel your booking with its private key.</p></div></div>
           <button class="btn ghost full-width" type="button" data-navigate="myrides">Find or manage a booking</button>
@@ -133,10 +132,18 @@
 
     <!-- ============ LIVE MAP ============ -->
     <section class="view active" id="view-map">
+      <div class="profile-bar">
+        <form id="profileForm" class="profile-form">
+          <label for="profileUsername">Profile Games</label>
+          <input id="profileUsername" type="text" minlength="3" maxlength="20" autocomplete="off" placeholder="Roblox username (e.g. Roblox)" />
+          <button class="btn ghost" type="submit">Load games</button>
+        </form>
+        <p class="muted" id="profileStatus">Maps are generated from a Roblox profile's public games.</p>
+        <div id="profileGames" class="profile-games" aria-live="polite"></div>
+      </div>
       <div class="map-toolbar">
         <div class="seg" id="mapSwitch">
-          <button class="seg-btn active" data-map="brookhaven">Brookhaven RP</button>
-          <button class="seg-btn" data-map="bloxburg">Welcome to Bloxburg</button>
+          <span class="muted">No profile games loaded yet.</span>
         </div>
         <div class="filters" id="filters">
           <button class="chip active" data-type="all">All</button>
@@ -205,7 +212,7 @@
           <div class="msg bot">Hi! I'm the ROBLOX UBERS assistant. Ask me about tracking, WiFi hotspots, premium plans or the Roblox API.</div>
         </div>
         <form class="chat-form" id="chatForm">
-          <input id="chatInput" type="text" autocomplete="off" placeholder="How do I track the bus in Brookhaven?" />
+          <input id="chatInput" type="text" autocomplete="off" placeholder="How do I track the bus in my game?" />
           <button class="btn" type="submit">Send</button>
         </form>
       </div>
@@ -268,7 +275,7 @@
     <section class="view" id="view-integrate">
       <div class="hero">
         <h1>Put UBERS tracking in your Roblox game</h1>
-        <p>Public server counts and join links work for everyone. NPC dispatch and map dots require the owner to install the server scripts in an experience they control. Brookhaven RP and Welcome to Bloxburg are third-party experiences; this project cannot join them as a bot or install drivers there.</p>
+        <p>Public server counts and join links work for everyone. NPC dispatch and map dots require the owner to install the server scripts in an experience they control. Third-party experiences such as Brookhaven RP are examples only; this project cannot join them as a bot or install drivers there.</p>
       </div>
       <div class="grid">
         <div class="card">
@@ -298,7 +305,7 @@ npm start              # http://localhost:3000</code></pre>
         </div>
         <div class="card">
           <h3>4. Owner-installed NPC rides</h3>
-          <p class="muted">Copy <code>roblox/UBERS_Dispatch.server.lua</code> into ServerScriptService in an original experience you own or are authorized to integrate, including your own Brookhaven-style or Bloxburg-inspired test place. Configure the server URL/token/map and world bounds, and add your own NPC-equipped car, taxi and bus models under <code>ServerStorage/UBERSVehicles</code>. Place a depot marker named <code>UBERSDepot</code> in Workspace, set the matching <code>ROBLOX_UBERS_PLACE_ID_*</code> in the server <code>.env</code>, and adapt the POIs/routes to your world. A ride can board only after the Roblox account linked to the booking joins that same server. Routes use straight-line sample movement and require adaptation/testing. This cannot add bots to or modify the official Brookhaven RP or Welcome to Bloxburg games.</p>
+          <p class="muted">Copy <code>roblox/UBERS_Dispatch.server.lua</code> into ServerScriptService in an original experience you own or are authorized to integrate, including your own roleplay test place. Configure the server URL/token/map and world bounds, and add your own NPC-equipped car, taxi and bus models under <code>ServerStorage/UBERSVehicles</code>. Place a depot marker named <code>UBERSDepot</code> in Workspace, then load a Profile Games profile whose public games include your published place so bookings, stats, and dispatch use its place ID, and adapt the POIs/routes to your world. A ride can board only after the Roblox account linked to the booking joins that same server. Routes use straight-line sample movement and require adaptation/testing. This cannot add bots to or modify the official Brookhaven RP or Welcome to Bloxburg games.</p>
         </div>
       </div>
       <div class="card">
@@ -325,18 +332,18 @@ npm start              # http://localhost:3000</code></pre>
       <div class="card">
         <h3>Endpoints</h3>
         <table class="api">
-          <tr><td>GET</td><td>/api/tracking?map=brookhaven</td><td>Live vehicle positions</td></tr>
-          <tr><td>GET</td><td>/api/rides/timetable?map=brookhaven&amp;routeId=b1</td><td>Roleplay departures and remaining seats</td></tr>
+          <tr><td>GET</td><td>/api/tracking?map=game-90010001</td><td>Live vehicle positions</td></tr>
+          <tr><td>GET</td><td>/api/rides/timetable?map=game-90010001&amp;routeId=b1</td><td>Roleplay departures and remaining seats</td></tr>
           <tr><td>POST</td><td>/api/bookings</td><td>Reserve 1–4 roleplay seats</td></tr>
           <tr><td>POST</td><td>/api/bookings/:reference/lookup</td><td>Private booking lookup (management key in body)</td></tr>
           <tr><td>POST</td><td>/api/bookings/:reference/profile</td><td>Attach a public Roblox profile to a scheduled ride (management key in body)</td></tr>
           <tr><td>DELETE</td><td>/api/bookings/:reference</td><td>Cancel a future booking (management key in body)</td></tr>
           <tr><td>POST</td><td>/api/roblox/profile</td><td>Resolve public Roblox username and profile (no account sign-in)</td></tr>
-          <tr><td>GET</td><td>/api/roblox/dispatch/next?map=brookhaven</td><td>Owner script checks for a due roleplay ride (token required)</td></tr>
+          <tr><td>GET</td><td>/api/roblox/dispatch/next?map=game-90010001</td><td>Owner script checks for a due roleplay ride (token required)</td></tr>
           <tr><td>POST</td><td>/api/roblox/dispatch/claim</td><td>Owner script claims and spawns a configured NPC vehicle (token required)</td></tr>
           <tr><td>POST</td><td>/api/roblox/dispatch/:reference/status</td><td>Owner script updates NPC trip status (token required)</td></tr>
           <tr><td>POST</td><td>/api/tracking/ping</td><td>Roblox place reports vehicles (x-ubers-token)</td></tr>
-          <tr><td>GET</td><td>/api/players?map=brookhaven</td><td>Anonymous, recent player positions</td></tr>
+          <tr><td>GET</td><td>/api/players?map=game-90010001</td><td>Anonymous, recent player positions</td></tr>
           <tr><td>POST</td><td>/api/players/ping</td><td>Roblox server reports its player roster (x-ubers-token)</td></tr>
           <tr><td>GET</td><td>/api/roblox/games?placeIds=...</td><td>Roblox game stats + icons</td></tr>
           <tr><td>POST</td><td>/api/ai/chat</td><td>OpenRouter AI support</td></tr>
@@ -354,13 +361,13 @@ npm start              # http://localhost:3000</code></pre>
       </div>
       <div class="faq-list">
         <details class="card"><summary>Are these real rides or real vehicles?</summary><p>No. UBERS is a fan-made Roblox roleplay dashboard. Reservations are fictional schedules for in-game play and do not arrange transportation, hire drivers, or dispatch real vehicles.</p></details>
-        <details class="card"><summary>Can UBERS put a driver in Brookhaven or Bloxburg?</summary><p>No. These are third-party Roblox experiences. Only each experience's creator can publish server scripts there. UBERS can dispatch owner-provided NPC vehicles in an experience where you have creator access and install the dispatch script.</p></details>
+        <details class="card"><summary>Can UBERS put a driver in any Roblox game?</summary><p>No. Only each experience's creator can publish server scripts there. UBERS can dispatch owner-provided NPC vehicles in an experience where you have creator access and install the dispatch script.</p></details>
         <details class="card"><summary>How do I book and manage a ride?</summary><p>Choose Book a ride, select a game, route, stops, departure and seats, then enter a roleplay display name. You can attach a public Roblox username, but it is not verified sign-in. Save the booking reference and private management key. Use both under My bookings to view or cancel it.</p></details>
         <details class="card"><summary>Why can't I see players on the map?</summary><p>Roblox's public APIs provide aggregate game and public-server information, not player identities or in-world positions. Anonymous position dots only appear for a Roblox experience whose owner has installed and configured this project's tracker.</p></details>
         <details class="card"><summary>Are seat times and capacity real-time?</summary><p>Seat availability updates from bookings stored on the connected UBERS server. The timetable is a roleplay schedule, not a live vehicle estimate; it doesn't guarantee a player or vehicle will be present in the game.</p></details>
         <details class="card"><summary>What if the website says bookings aren't connected?</summary><p>GitHub Pages is static. Timetables, booking storage, and cancellation need the UBERS Node server and its HTTPS API tunnel to be online. The Windows app runs the server locally; a Cloudflare Quick Tunnel only works while its connector is running and its address can change.</p></details>
         <details class="card"><summary>What information do you need?</summary><p>A short roleplay display name, selected stops, departure, and number of seats are stored on the server to manage the booking. Do not enter passwords, email addresses, phone numbers, or other sensitive personal information. Public timetable responses never list rider names or booking references.</p></details>
-        <details class="card"><summary>How do I contact the game creators?</summary><p>ROBLOX UBERS is not affiliated with, endorsed by, or sponsored by Roblox Corporation or the creators of Brookhaven RP or Welcome to Bloxburg. Please use their official support channels for game-specific help.</p></details>
+        <details class="card"><summary>How do I contact the game creators?</summary><p>ROBLOX UBERS is not affiliated with, endorsed by, or sponsored by Roblox Corporation or the creators of third-party Roblox experiences. Please use their official support channels for game-specific help.</p></details>
       </div>
     </section>
 

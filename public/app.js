@@ -5,7 +5,7 @@ const NS = 'http://www.w3.org/2000/svg';
 
 const state = {
   maps: {},
-  mapId: 'brookhaven',
+  mapId: '',
   vehicles: [],
   players: [],
   playerServers: 0,
@@ -1087,15 +1087,117 @@ function selectVehicle(id) {
   drawVehicles();
 }
 
+/* ---------------- profile games switcher ---------------- */
+function mapList() {
+  return Object.values(state.maps);
+}
+
+function renderMapSwitch() {
+  const host = $('#mapSwitch');
+  if (!host) return;
+  host.innerHTML = '';
+  const maps = mapList();
+  if (!maps.length) {
+    const empty = document.createElement('span');
+    empty.className = 'muted';
+    empty.textContent = 'No profile games loaded yet.';
+    host.appendChild(empty);
+    return;
+  }
+  maps.forEach((map, index) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'seg-btn' + ((map.id === state.mapId) || (!state.mapId && index === 0) ? ' active' : '');
+    btn.dataset.map = map.id;
+    const icon = map.profileGame?.icon;
+    btn.innerHTML = `${icon ? `<img class="seg-icon" src="${icon}" alt="">` : '🎮'} ${escapeHtml(map.name)}`;
+    btn.addEventListener('click', () => selectMap(map.id));
+    host.appendChild(btn);
+  });
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function selectMap(mapId) {
+  if (!state.maps[mapId]) return;
+  state.mapId = mapId;
+  state.selected = null;
+  $$('#mapSwitch .seg-btn').forEach((x) => x.classList.toggle('active', x.dataset.map === mapId));
+  renderMap();
+  pollTracking();
+}
+
+function populateRideMapSelect() {
+  const select = $('#rideMap');
+  if (!select) return;
+  const previous = select.value;
+  const maps = mapList();
+  select.replaceChildren(...maps.map((map) => {
+    const option = document.createElement('option');
+    option.value = map.id;
+    option.textContent = map.name;
+    return option;
+  }));
+  if (maps.some((map) => map.id === previous)) select.value = previous;
+  else if (state.mapId) select.value = state.mapId;
+}
+
+async function loadProfileGames(username) {
+  const status = $('#profileStatus');
+  if (status) status.textContent = 'Loading profile games…';
+  try {
+    const data = await api(`/api/profile/games?username=${encodeURIComponent(username)}`);
+    (data.maps || []).forEach((m) => (state.maps[m.id] = m));
+    renderMapSwitch();
+    populateRideMapSelect();
+    const gamesBox = $('#profileGames');
+    if (gamesBox) {
+      gamesBox.innerHTML = '';
+      const head = document.createElement('div');
+      head.className = 'profile-head';
+      head.innerHTML = `${data.profile.avatarUrl ? `<img src="${data.profile.avatarUrl}" alt="">` : ''}
+        <div><b>@${escapeHtml(data.profile.username)}</b>
+        <span class="muted">${(data.games || []).length} public game${(data.games || []).length === 1 ? '' : 's'}</span></div>`;
+      gamesBox.appendChild(head);
+      (data.games || []).forEach((game) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'game-chip';
+        card.innerHTML = `${game.icon ? `<img src="${game.icon}" alt="">` : '🎮'}
+          <span><b>${escapeHtml(game.name)}</b>
+          <small>${game.playing != null ? `${game.playing} playing` : 'view map'}${game.visits != null ? ` · ${fmt(game.visits)} visits` : ''}</small></span>`;
+        card.addEventListener('click', () => {
+          selectMap(`game-${game.universeId}`);
+          activateView('map');
+        });
+        gamesBox.appendChild(card);
+      });
+    }
+    if (status) status.textContent = `${(data.maps || []).length} map(s) added from @${data.profile.username}.`;
+    if (data.maps?.length) selectMap(data.maps[0].id);
+    toast(`Loaded ${data.maps.length} profile game map(s).`);
+  } catch (e) {
+    if (status) status.textContent = e.message;
+    toast(e.message);
+  }
+}
+
 $$('#mapSwitch .seg-btn').forEach((b) =>
   b.addEventListener('click', () => {
-    $$('#mapSwitch .seg-btn').forEach((x) => x.classList.toggle('active', x === b));
-    state.mapId = b.dataset.map;
-    state.selected = null;
-    renderMap();
-    pollTracking();
+    selectMap(b.dataset.map);
   })
 );
+
+const profileForm = $('#profileForm');
+if (profileForm) {
+  profileForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = $('#profileUsername').value.trim();
+    if (username) loadProfileGames(username);
+  });
+}
 
 $$('#filters .chip').forEach((b) =>
   b.addEventListener('click', () => {
@@ -1463,15 +1565,25 @@ async function boot() {
     addMsg('Live Roblox data and roleplay bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
   }
   try {
-    const { maps } = await api('/api/maps');
-    maps.forEach((m) => (state.maps[m.id] = m));
+    const data = await api('/api/maps');
+    (data.maps || []).forEach((m) => (state.maps[m.id] = m));
+    if (!state.mapId && Object.keys(state.maps).length) state.mapId = Object.keys(state.maps)[0];
+    renderMapSwitch();
+    populateRideMapSelect();
     renderMap();
     initializeBookingForm();
+    const status = $('#profileStatus');
+    if (status && data.sourceProfile && data.profile?.username) {
+      status.textContent = `Maps from @${data.profile.username} (${Object.keys(state.maps).length} game${Object.keys(state.maps).length === 1 ? '' : 's'}).`;
+    }
   } catch (e) {
     toast(e.message);
     const maps = window.UBERS_STATIC_MODE ? window.UBERS_STATIC_DATA?.maps || [] : [];
     maps.forEach((map) => (state.maps[map.id] = map));
     if (maps.length) {
+      if (!state.mapId) state.mapId = maps[0].id;
+      renderMapSwitch();
+      populateRideMapSelect();
       renderMap();
       initializeBookingForm();
     }

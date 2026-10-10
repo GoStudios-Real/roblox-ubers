@@ -10,6 +10,7 @@ const express = require('express');
 const Stripe = require('stripe');
 
 const { MAPS, getMap, configuredMaps, getConfiguredMap } = require('./lib/maps');
+const profileGames = require('./lib/profile-games');
 const fleet = require('./lib/fleet');
 const players = require('./lib/players');
 const bookings = require('./lib/bookings');
@@ -59,6 +60,8 @@ app.get('/api/health', (_req, res) =>
     name: 'ROBLOX UBERS',
     apiVersion: 2,
     time: new Date().toISOString(),
+    maps: configuredMaps().length,
+    profile: profileGames.currentProfile(),
     integrations: {
       openrouter: hasKey('OPENROUTER_API_KEY'),
       stripe: hasKey('STRIPE_SECRET_KEY'),
@@ -69,11 +72,45 @@ app.get('/api/health', (_req, res) =>
   })
 );
 
-// ---------- Maps ----------
-app.get('/api/maps', (_req, res) => h(res, 200, { maps: configuredMaps() }));
-app.get('/api/maps/:id', (req, res) => {
+// ---------- Maps (from Roblox profile games) ----------
+const defaultProfile = () => String(process.env.ROBLOX_PROFILE_USERNAME || '').trim();
+
+async function ensureMaps() {
+  try {
+    return await profileGames.refreshRegistry(defaultProfile());
+  } catch (error) {
+    if (!configuredMaps().length) return null;
+    throw error;
+  }
+}
+
+app.get('/api/maps', async (_req, res) => {
+  await ensureMaps();
+  h(res, 200, {
+    maps: configuredMaps(),
+    profile: profileGames.currentProfile(),
+    sourceProfile: defaultProfile() || null
+  });
+});
+
+app.get('/api/maps/:id', async (req, res) => {
+  await ensureMaps();
   const map = getConfiguredMap(req.params.id);
   return map ? h(res, 200, map) : h(res, 404, { error: 'map not found' });
+});
+
+app.get('/api/profile/games', async (req, res) => {
+  const username = String(req.query.username || defaultProfile() || (profileGames.FIXTURE ? 'fixture' : '')).trim();
+  if (!username) {
+    return h(res, 400, { error: 'Provide ?username= (a Roblox username or group:<id>), or set ROBLOX_PROFILE_USERNAME in .env.' });
+  }
+  try {
+    const data = await profileGames.fetchProfileGames(username);
+    profileGames.registerMaps(data.maps);
+    h(res, 200, data);
+  } catch (error) {
+    h(res, error.statusCode || 502, { error: error.message });
+  }
 });
 
 // ---------- Roleplay rides ----------
@@ -253,6 +290,22 @@ async function robloxGameInfo(placeId) {
   const cacheKey = `game:${placeId}`;
   const cached = cacheGet(cacheKey, 60000);
   if (cached) return cached;
+
+  if (profileGames.FIXTURE) {
+    const stub = {
+      placeId,
+      error: null,
+      name: `Fixture game ${placeId}`,
+      playing: 0,
+      visits: 0,
+      favorites: 0,
+      maxPlayers: 0,
+      votes: { up: 0, down: 0 },
+      rating: null
+    };
+    cacheSet(cacheKey, stub);
+    return stub;
+  }
 
   const out = { placeId, error: null };
   try {
@@ -461,7 +514,7 @@ app.get('/api/roblox/key-status', async (_req, res) => {
   if (!configured) {
     return h(res, 200, { configured: false, ok: false, message: 'Add ROBLOX_API_KEY to .env (Create > Credentials).' });
   }
-  const universeId = process.env.ROBLOX_UBERS_UNIVERSE_ID_BROOKHAVEN;
+  const universeId = process.env.ROBLOX_UBERS_UNIVERSE_ID || configuredMaps()[0]?.universeId;
   try {
     const url = universeId
       ? `https://apis.roblox.com/cloud/v2/universes/${universeId}`
@@ -492,8 +545,8 @@ function rateLimit(ip, max = 20, windowMs = 60000) {
 }
 
 const SYSTEM_PROMPT = [
-  'You are the support assistant for ROBLOX UBERS, an independent app for original roleplay test experiences',
-  'inspired by Brookhaven-style city roleplay and Bloxburg-style living games.',
+  'You are the support assistant for ROBLOX UBERS, an app that turns Roblox profile games into live ride maps.',
+  'Every map is generated from a Roblox profile\'s public games (searchable in the Profile Games bar on the Live Map).',
   'You can track cars, buses and taxis on the Live Map, connect to FREE WiFi hotspots on the map,',
   'and subscribe to UBERS Premium with Stripe.',
   'Keep answers short, friendly and under 120 words. If asked about a specific vehicle, tell the user to open the Live Map tab.',
@@ -629,18 +682,21 @@ app.get('/api/billing/session', async (req, res) => {
 // ---------- Free WiFi ----------
 const wifiSessions = new Map();
 
-app.get('/api/wifi/hotspots', (_req, res) => {
-  const configured = new Map(configuredMaps().map((map) => [map.id, map]));
-  const hotspots = Object.values(MAPS).flatMap((m) =>
-    m.pois.filter((p) => p.cat === 'wifi').map((p) => ({ ...p, map: m.id, mapName: configured.get(m.id).name }))
+app.get('/api/wifi/hotspots', async (_req, res) => {
+  await ensureMaps();
+  const hotspots = configuredMaps().flatMap((m) =>
+    (m.pois || []).filter((p) => p.cat === 'wifi').map((p) => ({ ...p, map: m.id, mapName: m.name }))
   );
   h(res, 200, { hotspots, free: true, speed: '100 Mbps', note: 'Free WiFi for all ROBLOX UBERS riders.' });
 });
 
-app.post('/api/wifi/connect', (req, res) => {
-  const hotspotId = String(req.body?.hotspotId || 'wifi-downtown');
+app.post('/api/wifi/connect', async (req, res) => {
+  await ensureMaps();
+  const hotspotId = String(req.body?.hotspotId || 'wifi-hub');
   const device = String(req.body?.device || 'device').slice(0, 64);
-  const map = Object.values(MAPS).find((m) => m.pois.some((p) => p.id === hotspotId)) || MAPS.brookhaven;
+  const maps = configuredMaps();
+  const map = maps.find((m) => (m.pois || []).some((p) => p.id === hotspotId)) || maps[0];
+  if (!map) return h(res, 404, { error: 'No profile-game maps are loaded yet.' });
   const code = 'UBERS-' + crypto.randomBytes(3).toString('hex').toUpperCase();
   const record = {
     code,
@@ -665,7 +721,7 @@ app.get(/^\/(?!api\/).*/, (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`ROBLOX UBERS running on ${BASE_URL}`);
   if (process.pkg && process.platform === 'win32' && !process.env.UBERS_NO_BROWSER) {
     execFile('rundll32.exe', ['url.dll,FileProtocolHandler', `http://localhost:${PORT}`], (error) => {
@@ -677,4 +733,19 @@ app.listen(PORT, () => {
       'STRIPE_SECRET_KEY'
     )} robloxKey=${hasKey('ROBLOX_API_KEY')} tracking=${Boolean(TRACKING_TOKEN)}`
   );
+
+  // Profile Games: load the default profile's games as maps, then keep them fresh.
+  try {
+    const data = await ensureMaps();
+    console.log(
+      data
+        ? `Profile Games: ${data.games.length} game map(s) from @${data.profile.username}`
+        : `Profile Games: no ROBLOX_PROFILE_USERNAME configured - load one from the site.`
+    );
+  } catch (error) {
+    console.error(`Profile Games refresh failed: ${error.message}`);
+  }
+  setInterval(() => {
+    ensureMaps().catch((error) => console.error(`Profile Games refresh failed: ${error.message}`));
+  }, 5 * 60 * 1000);
 });
