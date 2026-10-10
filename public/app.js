@@ -364,11 +364,11 @@ function renderSavedBookings() {
 function dispatchStatusText(status) {
   return ({
     scheduled: 'Scheduled',
-    profile_required: 'Add a Roblox profile to request an NPC driver',
-    waiting: 'Waiting for an owner-run game server',
-    claimed: 'NPC driver assigned',
-    enroute: 'NPC vehicle on the way',
-    arrived: 'NPC driver at pickup',
+    profile_required: 'Add a Roblox profile so a driver can find you',
+    waiting: 'Waiting for a driver or game server',
+    claimed: 'Driver assigned',
+    enroute: 'Driver on the way',
+    arrived: 'Driver at pickup',
     picked_up: 'Ride in progress',
     completed: 'Ride completed',
     failed: 'Dispatch failed',
@@ -578,7 +578,8 @@ function renderBookingCard(booking, manageKey) {
   status.className = `booking-status${booking.status === 'cancelled' ? ' cancelled' : ''}`;
   status.textContent = `Status: ${booking.status}`;
   const dispatch = document.createElement('p');
-  dispatch.textContent = `Driver: ${dispatchStatusText(booking.dispatchStatus)}`;
+  dispatch.textContent = `Driver: ${dispatchStatusText(booking.dispatchStatus)}` +
+    (booking.driver ? ` · ${booking.driver.name}` : '');
   card.append(title, details, departure, status, dispatch);
   const tracking = document.createElement('section');
   tracking.className = 'ride-tracking';
@@ -1565,6 +1566,271 @@ $('#keyCheckBtn').addEventListener('click', async () => {
 });
 
 /* ---------------- boot ---------------- */
+// ---------- Drive tab: real-player driver jobs ----------
+let jobsRefreshTimer = null;
+let pendingClaimReference = null;
+
+function savedDriverJobs() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('ubersDriverJobs') || '[]');
+    return Array.isArray(parsed) ? parsed.filter((entry) => entry && entry.reference && entry.code) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDriverJobs(list) {
+  localStorage.setItem('ubersDriverJobs', JSON.stringify(list));
+}
+
+function robloxLaunchUrl(placeId, serverId) {
+  let url = `roblox://experiences/start?placeId=${encodeURIComponent(placeId)}`;
+  if (serverId) url += `&gameInstanceId=${encodeURIComponent(serverId)}`;
+  return url;
+}
+
+async function loadJobsView() {
+  await Promise.all([refreshJobList(), refreshDriverJobs()]);
+}
+
+async function refreshJobList() {
+  const list = $('#jobList');
+  if (!list) return;
+  try {
+    const data = await api('/api/jobs');
+    const jobs = data.jobs || [];
+    if ($('#jobCount')) $('#jobCount').textContent = String(jobs.length);
+    list.replaceChildren();
+    if (!jobs.length) {
+      const empty = document.createElement('p');
+      empty.className = 'muted';
+      empty.textContent = 'No open rides right now. Book a ride first — it appears here until a driver claims it.';
+      list.appendChild(empty);
+      return;
+    }
+    jobs.forEach((job) => list.appendChild(renderJobRow(job)));
+  } catch (error) {
+    list.replaceChildren();
+    const line = document.createElement('p');
+    line.className = 'muted';
+    line.textContent = `Open rides unavailable: ${error.message}`;
+    list.appendChild(line);
+  }
+}
+
+function renderJobRow(job) {
+  const row = document.createElement('div');
+  row.className = 'saved-booking job-row';
+  const info = document.createElement('div');
+  info.className = 'job-row-info';
+  const title = document.createElement('b');
+  title.textContent = `${job.reference} · ${job.routeType || 'ride'} · ${job.mapName}`;
+  const detail = document.createElement('small');
+  detail.className = 'muted';
+  detail.textContent = `${job.pickupName} → ${job.dropoffName} · ${localDateTime(job.departureAt)} · ${job.seats} seat${job.seats === 1 ? '' : 's'} · rider: ${job.riderName}` +
+    (job.riderRoblox ? ` (@${job.riderRoblox})` : '');
+  info.append(title, detail);
+  const actions = document.createElement('div');
+  actions.className = 'job-row-actions';
+  const join = document.createElement('a');
+  join.className = 'btn ghost';
+  join.href = robloxLaunchUrl(job.placeId);
+  join.textContent = '🎮 Join game';
+  join.title = 'Open this Roblox experience on your device';
+  const claim = document.createElement('button');
+  claim.type = 'button';
+  claim.className = 'btn';
+  claim.textContent = 'Claim job';
+  claim.addEventListener('click', () => renderClaimForm(job));
+  actions.append(join, claim);
+  row.append(info, actions);
+  return row;
+}
+
+function renderClaimForm(job) {
+  pendingClaimReference = job.reference;
+  const panel = $('#jobClaimPanel');
+  if (!panel) return;
+  panel.replaceChildren();
+  const card = document.createElement('form');
+  card.className = 'card lookup-form';
+  const heading = document.createElement('h3');
+  heading.textContent = `Claim ${job.reference}`;
+  const summary = document.createElement('p');
+  summary.className = 'muted';
+  summary.textContent = `${job.mapName} · ${job.routeName} · ${job.pickupName} → ${job.dropoffName} · ${localDateTime(job.departureAt)}`;
+  const nameLabel = document.createElement('label');
+  nameLabel.textContent = 'Driver display name';
+  const nameInput = document.createElement('input');
+  nameInput.required = true;
+  nameInput.minLength = 2;
+  nameInput.maxLength = 24;
+  nameInput.autocomplete = 'off';
+  nameInput.placeholder = 'e.g. TaxiKing42';
+  nameLabel.appendChild(nameInput);
+  const userLabel = document.createElement('label');
+  userLabel.textContent = 'Roblox username (optional)';
+  const userInput = document.createElement('input');
+  userInput.pattern = '[A-Za-z0-9_]{3,20}';
+  userInput.autocomplete = 'off';
+  userInput.placeholder = 'Shown to the rider so they can find you';
+  userLabel.appendChild(userInput);
+  const submit = document.createElement('button');
+  submit.type = 'submit';
+  submit.className = 'btn';
+  submit.textContent = 'Claim this ride';
+  const hint = document.createElement('p');
+  hint.className = 'field-hint';
+  hint.textContent = 'You will get a private driver code (shown once). Anyone with the code can update this ride — keep it secret.';
+  card.append(heading, summary, nameLabel, userLabel, submit, hint);
+  card.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const result = await api(`/api/jobs/${encodeURIComponent(job.reference)}/claim`, {
+        method: 'POST',
+        body: { driverName: nameInput.value, driverUsername: userInput.value }
+      });
+      const saved = savedDriverJobs().filter((entry) => entry.reference !== job.reference);
+      saved.push({ reference: job.reference, code: result.driverCode, mapName: job.mapName });
+      saveDriverJobs(saved);
+      pendingClaimReference = null;
+      showDriverCode(job, result.driverCode);
+      await loadJobsView();
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+  panel.appendChild(card);
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function showDriverCode(job, driverCode) {
+  const panel = $('#jobClaimPanel');
+  panel.replaceChildren();
+  const card = document.createElement('div');
+  card.className = 'card booking-card';
+  const heading = document.createElement('h3');
+  heading.textContent = `Driver code for ${job.reference}`;
+  const code = document.createElement('code');
+  code.className = 'token';
+  code.textContent = driverCode;
+  const hint = document.createElement('p');
+  hint.className = 'field-hint';
+  hint.textContent = 'Shown once and saved only in this browser. Copy it somewhere safe — you need it to update the ride status.';
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'btn ghost';
+  copy.textContent = 'Copy code';
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(driverCode);
+      toast('Driver code copied.');
+    } catch {
+      toast('Select the code and copy it manually.');
+    }
+  });
+  card.append(heading, code, hint, copy);
+  panel.appendChild(card);
+}
+
+async function refreshDriverJobs() {
+  const list = $('#driverJobList');
+  if (!list) return;
+  const entries = savedDriverJobs();
+  if ($('#driverJobCount')) $('#driverJobCount').textContent = String(entries.length);
+  if (!entries.length) {
+    list.replaceChildren();
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'No claimed jobs in this browser yet.';
+    list.appendChild(empty);
+    return;
+  }
+  const results = await Promise.all(entries.map(async (entry) => {
+    try {
+      const data = await api(`/api/jobs/driver?code=${encodeURIComponent(entry.code)}`);
+      return { entry, job: data.job };
+    } catch {
+      return { entry, job: null };
+    }
+  }));
+  const stillSaved = [];
+  list.replaceChildren();
+  results.forEach(({ entry, job }) => {
+    if (!job) return;
+    stillSaved.push(entry);
+    list.appendChild(renderDriverJobRow(entry, job));
+  });
+  if (stillSaved.length !== entries.length) saveDriverJobs(stillSaved);
+  if (!stillSaved.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'No claimed jobs in this browser yet.';
+    list.appendChild(empty);
+  }
+}
+
+const DRIVER_ACTIONS = {
+  claimed: [{ status: 'enroute', label: '🚗 On the way' }, { release: true, label: 'Release job' }],
+  enroute: [{ status: 'arrived', label: '📍 At pickup' }, { status: 'failed', label: 'Fail job' }],
+  arrived: [{ status: 'picked_up', label: '👥 Picked up' }, { status: 'failed', label: 'Fail job' }],
+  picked_up: [{ status: 'completed', label: '✅ Ride completed' }, { status: 'failed', label: 'Fail job' }],
+  completed: [{ remove: true, label: 'Remove' }],
+  failed: [{ release: true, label: 'Return to open list' }, { remove: true, label: 'Remove' }]
+};
+
+function renderDriverJobRow(entry, job) {
+  const row = document.createElement('div');
+  row.className = 'saved-booking job-row';
+  const info = document.createElement('div');
+  info.className = 'job-row-info';
+  const title = document.createElement('b');
+  title.textContent = `${job.reference} · ${dispatchStatusText(job.dispatchStatus)}`;
+  const detail = document.createElement('small');
+  detail.className = 'muted';
+  detail.textContent = `${job.mapName} · ${job.pickupName} → ${job.dropoffName} · ${localDateTime(job.departureAt)} · rider: ${job.riderName}` +
+    (job.riderRoblox ? ` (@${job.riderRoblox})` : '');
+  info.append(title, detail);
+  const actions = document.createElement('div');
+  actions.className = 'job-row-actions';
+  const join = document.createElement('a');
+  join.className = 'btn ghost';
+  join.href = robloxLaunchUrl(job.placeId);
+  join.textContent = '🎮 Join game';
+  actions.appendChild(join);
+  (DRIVER_ACTIONS[job.dispatchStatus] || []).forEach((action) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = action.release || action.remove ? 'btn ghost' : 'btn';
+    button.textContent = action.label;
+    button.addEventListener('click', async () => {
+      try {
+        if (action.status) {
+          await api(`/api/jobs/${encodeURIComponent(job.reference)}/status`, {
+            method: 'POST',
+            body: { driverCode: entry.code, status: action.status }
+          });
+        } else if (action.release) {
+          await api(`/api/jobs/${encodeURIComponent(job.reference)}/release`, {
+            method: 'POST',
+            body: { driverCode: entry.code }
+          });
+          saveDriverJobs(savedDriverJobs().filter((saved) => saved.reference !== entry.reference));
+          toast('Job released back to the open list.');
+        } else if (action.remove) {
+          saveDriverJobs(savedDriverJobs().filter((saved) => saved.reference !== entry.reference));
+        }
+        await loadJobsView();
+      } catch (error) {
+        toast(error.message);
+      }
+    });
+    actions.appendChild(button);
+  });
+  row.append(info, actions);
+  return row;
+}
+
 function activateView(name, wifiPreselect) {
   if (!$(`#view-${name}`)) return;
   if (location.hash !== `#${name}`) location.hash = name;
@@ -1573,6 +1839,16 @@ function activateView(name, wifiPreselect) {
   if (name === 'wifi') loadWifi(wifiPreselect);
   if (name === 'premium') loadPlans();
   if (name === 'roblox') loadGames();
+  if (name === 'jobs') {
+    loadJobsView();
+    if (!jobsRefreshTimer) {
+      jobsRefreshTimer = setInterval(() => {
+        if (document.visibilityState === 'visible' && $('#view-jobs').classList.contains('active')) {
+          loadJobsView();
+        }
+      }, 10000);
+    }
+  }
   if (name === 'myrides') {
     renderSavedBookings();
     if (!savedBookingRefreshTimer) {

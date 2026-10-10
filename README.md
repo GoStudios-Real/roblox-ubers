@@ -19,6 +19,7 @@ An Uber-inspired app for original Roblox roleplay test places. Every map is **ge
 | 🔌 Roblox script | `roblox/UBERS_VehicleTracker.server.lua` — reports anonymous player positions and tagged vehicles from your own experience |
 | 🗓️ Timetables | 30-minute roleplay departures on configured map routes, shown in the visitor's local time |
 | 🎟️ Ride bookings | Persistent seat reservations, route capacity checks, private booking references, secure management keys, lookup and cancellation |
+| 🧑‍✈️ Drive jobs | Real players claim open bookings on the Drive tab, get a private hashed driver code, and post live ride statuses (on the way → at pickup → picked up → completed) that update the rider's booking bar |
 | 🔊 Sound effects | Original synthesized interface tones for navigation and notifications, with a saved opt-in sound toggle |
 | 🚘 Owner-run NPC rides | Dispatches a configured NPC vehicle in an experience whose owner installs `roblox/UBERS_Dispatch.server.lua`; the booked Roblox account must join and board that server |
 | ❔ Help & terms | In-app FAQ, roleplay-only terms, privacy details, third-party trademark notices, and a © 2026 notice |
@@ -41,7 +42,7 @@ npm test
 
 The GitHub Pages site at <https://gostudios-real.github.io/roblox-ubers/> contains no fabricated player or vehicle positions. Its public-server counts, game stats, and roleplay booking API work when the `UBERS_API_BASE_URL` repository variable points to a running API v2 server's Cloudflare Tunnel HTTPS URL; Pages rejects outdated backends and displays safe static maps until the Windows app is updated. Otherwise live data and booking actions are explicitly unavailable. Pages cannot receive Roblox reports directly. Booking records are stored by the Node server in `data/bookings.json` during development, or `%LOCALAPPDATA%\ROBLOX-UBERS\bookings.json` when packaged as the Windows app. Set `UBERS_DATA_DIR` to choose another server data directory. Back up and protect that folder.
 
-To build the Windows executable locally, run `npm ci` and `npm run package:exe`. The versioned `dist/ROBLOX-UBERS-v1.5.0.exe` starts the full server and opens it in your browser; keep its console window open while using the app. Configure integrations in a `.env` file beside the executable. Publishing a `v*` tag builds the executable and attaches it to a GitHub Release.
+To build the Windows executable locally, run `npm ci` and `npm run package:exe`. The versioned `dist/ROBLOX-UBERS-v1.6.0.exe` starts the full server and opens it in your browser; keep its console window open while using the app. Configure integrations in a `.env` file beside the executable. Publishing a `v*` tag builds the executable and attaches it to a GitHub Release.
 
 The Integrate tab on GitHub Pages offers Notepad-friendly `.txt` downloads of the original town starter, NPC dispatcher, and vehicle tracker scripts. Rename a downloaded `.txt` file to `.lua` before installing it in Roblox Studio, and only install scripts in an experience you own or are authorized to edit.
 
@@ -88,6 +89,10 @@ This integration does not operate in third-party experiences such as official Br
 
 Install and configure `roblox/UBERS_Dispatch.server.lua` in your experience's `ServerScriptService`. Enable HTTP requests, give the server script the server's public HTTPS URL and the same secret `TRACKING_TOKEN`, and follow the vehicle/seat/depot setup in [`roblox/README.md`](roblox/README.md). Do not put the tracking token in a LocalScript, client UI, or a public repository. A ride dispatches in a 15-minute early to 30-minute late window; the rider must join that same server and board within three minutes after pickup arrival. The sample driver moves a configured vehicle in a straight line between map coordinates; it is a basic integration example, not Roblox pathfinding or tested vehicle physics.
 
+### Driver jobs (real players, no bots)
+
+Third-party experiences such as Brookhaven RP cannot be scripted from outside — a "bot" driving there would require a script executor, which violates Roblox's terms and risks permanent bans and malware. Driver jobs are the legitimate alternative: open the **Drive** tab, claim an open booking, and you get a private driver code (SHA-256 hash stored; shown once; kept in the browser's local storage). Join the game with the join button, meet the rider at the pickup stop with a car, taxi or bus, and advance the status buttons. The rider's booking page polls every 15 seconds, so the booking bar reflects your progress live. Claimed rides are locked out of the NPC dispatcher and other drivers; releasing returns the job to the open list. The public Roblox API cannot place driver and rider into one specific server, so both sides should pick the same public server from the Roblox API tab.
+
 ### Stripe Premium setup
 
 Hosted Checkout requires a private `STRIPE_SECRET_KEY` and a fully onboarded Stripe account. If Stripe reports required business, registration/tax, payout, or terms details, the account owner must enter truthful information in the [Stripe Dashboard onboarding page](https://dashboard.stripe.com/get-started). This project cannot fill in or bypass identity, legal, tax, or payout verification.
@@ -132,6 +137,11 @@ keep it only in the server's private environment.
 | POST | `/api/bookings/:reference/lookup` | Private booking lookup (`manageKey` in request body) |
 | POST | `/api/bookings/:reference/profile` | Attach a public Roblox profile to a future scheduled ride (`manageKey` in request body) |
 | DELETE | `/api/bookings/:reference` | Cancel a future booking (`manageKey` in request body) |
+| GET | `/api/jobs?map=game-90010001` | Open driver jobs (bookings without a driver; no secrets) |
+| POST | `/api/jobs/:reference/claim` | Claim a job as driver; returns private `driverCode` (64-hex, shown once) |
+| GET | `/api/jobs/driver?code=...` | Driver's claimed job (`driverCode` in query) |
+| POST | `/api/jobs/:reference/status` | Driver status update: `claimed → enroute → arrived → picked_up → completed` or `failed` (`driverCode` + `status` in body) |
+| POST | `/api/jobs/:reference/release` | Release a claimed job back to the open list (`driverCode` in body) |
 | GET | `/api/roblox/dispatch/next?map=game-90010001` | Owner-installed game server checks for a due ride (tracking token required) |
 | POST | `/api/roblox/dispatch/claim` · `/api/roblox/dispatch/:reference/status` | Claim a ride and update its dispatch state (tracking token required) |
 | GET | `/api/tracking?map=game-90010001` | Live vehicle positions |

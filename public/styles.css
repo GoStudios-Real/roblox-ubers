@@ -312,6 +312,11 @@ table.api td:nth-child(2) { font-family: Consolas, monospace; color: var(--blue)
 .saved-booking b { font-size: 12px; }
 .saved-booking small { color: var(--muted); font-size: 10px; text-align: right; }
 .saved-booking .btn { padding: 6px 10px; font-size: 11px; white-space: nowrap; }
+.job-row { align-items: flex-start; flex-wrap: wrap; }
+.job-row-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 240px; }
+.job-row-info small { text-align: left; white-space: normal; }
+.job-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+#jobClaimPanel .booking-card code.token { word-break: break-all; font-size: 11px; }
 .booking-details { margin-top: 16px; }
 .booking-card { display: flex; flex-direction: column; gap: 8px; }
 .booking-card h3 { margin: 0; }

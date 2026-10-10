@@ -230,6 +230,53 @@ app.delete('/api/bookings/:id', (req, res) => {
   }
 });
 
+// ---------- Website driver jobs (real players drive booked rides) ----------
+app.get('/api/jobs', async (req, res) => {
+  await ensureMaps().catch(() => {});
+  try {
+    const mapId = req.query.map ? String(req.query.map) : null;
+    h(res, 200, { jobs: bookings.listJobs(mapId), time: Date.now() });
+  } catch (error) {
+    h(res, error.statusCode || 400, { error: error.message });
+  }
+});
+
+app.post('/api/jobs/:reference/claim', (req, res) => {
+  try {
+    const result = bookings.claimJob(String(req.params.reference || ''), req.body);
+    h(res, 201, result);
+  } catch (error) {
+    h(res, error.statusCode || 400, { error: error.message });
+  }
+});
+
+app.get('/api/jobs/driver', (req, res) => {
+  const job = bookings.getDriverJob(String(req.query.code || ''));
+  return job ? h(res, 200, { job }) : h(res, 404, { error: 'Unknown driver code.' });
+});
+
+app.post('/api/jobs/:reference/status', (req, res) => {
+  try {
+    const job = bookings.updateDriverStatus(
+      String(req.params.reference || ''),
+      String(req.body?.driverCode || ''),
+      String(req.body?.status || '')
+    );
+    h(res, 200, { job });
+  } catch (error) {
+    h(res, error.statusCode || 400, { error: error.message });
+  }
+});
+
+app.post('/api/jobs/:reference/release', (req, res) => {
+  try {
+    const job = bookings.releaseJob(String(req.params.reference || ''), String(req.body?.driverCode || ''));
+    h(res, 200, { job });
+  } catch (error) {
+    h(res, error.statusCode || 400, { error: error.message });
+  }
+});
+
 // ---------- Tracking ----------
 app.get('/api/tracking', (req, res) => {
   const mapId = req.query.map ? String(req.query.map) : null;

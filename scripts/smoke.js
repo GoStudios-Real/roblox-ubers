@@ -335,6 +335,130 @@ async function main() {
       return 'persistence across store reload, capacity, private lookup, cancellation, validation and hashed key verified';
     });
 
+    await check('driver-jobs-flow', async () => {
+      const schedule = await json(`/api/rides/timetable?map=${MAP_A}&routeId=c1`);
+      const slot = schedule.departures[0].departureAt;
+      const created = await json('/api/bookings', {
+        method: 'POST',
+        body: {
+          mapId: MAP_A,
+          routeId: 'c1',
+          pickupPoiId: POI_PICKUP,
+          dropoffPoiId: POI_DROPOFF,
+          departureAt: slot,
+          seats: 2,
+          riderName: 'Job Rider'
+        }
+      });
+      const reference = created.booking.reference;
+      const manageKey = created.booking.manageKey;
+
+      const open = await json(`/api/jobs?map=${MAP_A}`);
+      const listed = (open.jobs || []).find((job) => job.reference === reference);
+      if (!listed) throw new Error('new booking did not appear as an open driver job');
+      if (listed.placeId !== PLACE_A || listed.routeType !== 'taxi' || !listed.pickupName?.endsWith('Central Transit Hub')) {
+        throw new Error(`open job is missing route or place details: placeId=${listed.placeId} routeType=${listed.routeType} pickupName=${listed.pickupName}`);
+      }
+      const listedJson = JSON.stringify(open);
+      if (listedJson.includes(manageKey) || listedJson.includes('codeHash') || listedJson.includes('driverCode')) {
+        throw new Error('public job list leaked a secret');
+      }
+
+      const badName = await fetch(`${BASE}/api/jobs/${reference}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driverName: 'x' })
+      });
+      if (badName.status !== 400) throw new Error(`invalid driver name returned ${badName.status}`);
+
+      const claimed = await json(`/api/jobs/${reference}/claim`, {
+        method: 'POST',
+        body: { driverName: 'Taxi Driver', driverUsername: 'driver_user1' }
+      });
+      if (!/^[a-f0-9]{64}$/.test(claimed.driverCode)) throw new Error('driver code was not a private 64-hex secret');
+      if (claimed.job.dispatchStatus !== 'claimed' || claimed.job.driver?.name !== 'Taxi Driver') {
+        throw new Error('claim did not assign the driver');
+      }
+
+      const afterClaim = await json(`/api/jobs?map=${MAP_A}`);
+      if ((afterClaim.jobs || []).some((job) => job.reference === reference)) {
+        throw new Error('claimed job still listed as open');
+      }
+      const duplicate = await fetch(`${BASE}/api/jobs/${reference}/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driverName: 'Second Driver' })
+      });
+      if (duplicate.status !== 409) throw new Error(`double claim returned ${duplicate.status}`);
+
+      const deniedDriver = await fetch(`${BASE}/api/jobs/driver?code=${'a'.repeat(64)}`);
+      if (deniedDriver.status !== 404) throw new Error(`unknown driver code returned ${deniedDriver.status}`);
+      const mine = await json(`/api/jobs/driver?code=${claimed.driverCode}`);
+      if (mine.job.reference !== reference || mine.job.dispatchStatus !== 'claimed') {
+        throw new Error('driver code did not resolve the claimed job');
+      }
+
+      const npcClaim = await fetch(`${BASE}/api/roblox/dispatch/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-ubers-token': TEST_TRACKING_TOKEN },
+        body: JSON.stringify({ reference, mapId: MAP_A, serverId: 'smoke-npc-001' })
+      });
+      const npcBody = await npcClaim.json().catch(() => ({}));
+      if (npcClaim.status !== 409 || !String(npcBody.error || '').includes('website driver')) {
+        throw new Error(`NPC dispatcher returned ${npcClaim.status} (${npcBody.error || ''}) for a website-driver ride`);
+      }
+
+      for (const status of ['enroute', 'arrived', 'picked_up', 'completed']) {
+        const step = await json(`/api/jobs/${reference}/status`, {
+          method: 'POST',
+          body: { driverCode: claimed.driverCode, status }
+        });
+        if (step.job.dispatchStatus !== status) throw new Error(`driver status did not advance to ${status}`);
+      }
+      const wrongStatus = await fetch(`${BASE}/api/jobs/${reference}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ driverCode: 'b'.repeat(64), status: 'completed' })
+      });
+      if (wrongStatus.status !== 404) throw new Error(`forged driver code returned ${wrongStatus.status}`);
+      const riderView = await json(`/api/bookings/${reference}/lookup`, {
+        method: 'POST',
+        body: { manageKey }
+      });
+      if (riderView.booking.dispatchStatus !== 'completed' || riderView.booking.driver?.name !== 'Taxi Driver') {
+        throw new Error('rider booking bar did not receive the live driver status');
+      }
+
+      const second = await json('/api/bookings', {
+        method: 'POST',
+        body: {
+          mapId: MAP_A,
+          routeId: 'c1',
+          pickupPoiId: POI_PICKUP,
+          dropoffPoiId: POI_DROPOFF,
+          departureAt: slot,
+          seats: 2,
+          riderName: 'Job Rider 2'
+        }
+      });
+      const secondClaim = await json(`/api/jobs/${second.booking.reference}/claim`, {
+        method: 'POST',
+        body: { driverName: 'Bus Driver' }
+      });
+      const released = await json(`/api/jobs/${second.booking.reference}/release`, {
+        method: 'POST',
+        body: { driverCode: secondClaim.driverCode }
+      });
+      if (released.job.dispatchStatus !== 'scheduled' || released.job.driver) {
+        throw new Error('released job did not return to the open list');
+      }
+      const reopened = await json(`/api/jobs?map=${MAP_A}`);
+      if (!(reopened.jobs || []).some((job) => job.reference === second.booking.reference)) {
+        throw new Error('released job is not open for other drivers again');
+      }
+      return 'claim, secret driver code, NPC conflict guard, live status chain and release verified';
+    });
+
     await check('ai-chat', async () => {
       if (!process.env.OPENROUTER_API_KEY) return 'skipped (no OPENROUTER_API_KEY)';
       const res = await fetch(`${BASE}/api/ai/chat`, {
@@ -480,14 +604,15 @@ async function main() {
     await check('spa-fallback', async () => {
       const res = await fetch(`${BASE}/#map`);
       const html = await res.text();
-      for (const text of ['ROBLOX UBERS', 'bookingForm', 'soundToggle', 'view-faq', 'view-legal', '© 2026']) {
+      for (const text of ['ROBLOX UBERS', 'bookingForm', 'soundToggle', 'view-faq', 'view-legal', '© 2026',
+        'view-jobs', 'jobList', 'driverJobList', 'Can bots spawn cars', '/api/jobs/:reference/claim']) {
         if (!html.includes(text)) throw new Error(`index is missing ${text}`);
       }
       const banner = await fetch(`${BASE}/assets/uber-banner.svg`);
       if (!banner.ok || !(await banner.text()).includes('UBERS roleplay ride banner')) {
         throw new Error('brand banner was not served');
       }
-      return 'booking, FAQ, terms, copyright and SVG banner are served';
+      return 'booking, Drive jobs, FAQ, terms, copyright and SVG banner are served';
     });
 
     await check('booking-tracker-and-12-hour-times', async () => {
