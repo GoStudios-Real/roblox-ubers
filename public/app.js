@@ -71,8 +71,9 @@ function resetApiBaseResolution() {
 // Actions repository variable is the backup source; the URL baked into
 // static-config.js is the last resort.
 const UBERS_API_BASE_SOURCES = [
-  'https://gist.githubusercontent.com/GoStudios-Real/a18e754f09a4b45df7d4ebdddaaa47ea/raw/ubers-api-base.txt',
-  'https://api.github.com/repos/GoStudios-Real/roblox-ubers/actions/variables/UBERS_API_BASE_URL'
+  { type: 'config', url: '' }, // same-origin static-config.js (updated by every supervisor deploy)
+  { type: 'gist', url: 'https://gist.githubusercontent.com/GoStudios-Real/a18e754f09a4b45df7d4ebdddaaa47ea/raw/ubers-api-base.txt' },
+  { type: 'variable', url: 'https://api.github.com/repos/GoStudios-Real/roblox-ubers/actions/variables/UBERS_API_BASE_URL' }
 ];
 
 function apiUrlFromText(text) {
@@ -80,15 +81,30 @@ function apiUrlFromText(text) {
   return /^https?:\/\/\S+$/.test(value) ? value.replace(/\/+$/, '') : '';
 }
 
-async function fetchApiBaseCandidate(source, index) {
+function staticConfigUrl() {
+  if (!/^https?:$/.test(location.protocol)) return '';
+  const dir = location.pathname.replace(/[^/]*$/, '');
+  return `${location.origin}${dir}static-config.js`;
+}
+
+async function fetchApiBaseCandidate(source) {
   const timeout = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined;
-  const res = await fetch(index === 0 ? `${source}?cb=${Date.now()}` : source, {
-    headers: index === 0 ? {} : { Accept: 'application/vnd.github+json' },
+  if (source.type === 'config') {
+    const url = staticConfigUrl();
+    if (!url) return '';
+    const res = await fetch(`${url}?cb=${Date.now()}`, { cache: 'no-store', signal: timeout });
+    if (!res.ok) return '';
+    const text = await res.text().catch(() => '');
+    const match = text.match(/UBERS_API_BASE_URL\s*=\s*"([^"]+)"/);
+    return match ? match[1].replace(/\/+$/, '') : '';
+  }
+  const res = await fetch(source.type === 'gist' ? `${source.url}?cb=${Date.now()}` : source.url, {
+    headers: source.type === 'variable' ? { Accept: 'application/vnd.github+json' } : {},
     cache: 'no-store',
     signal: timeout
   });
   if (!res.ok) return '';
-  if (index === 0) return apiUrlFromText(await res.text().catch(() => ''));
+  if (source.type === 'gist') return apiUrlFromText(await res.text().catch(() => ''));
   const data = await res.json().catch(() => ({}));
   return String(data.value || '').replace(/\/+$/, '');
 }
@@ -106,10 +122,10 @@ function resolveApiBaseOnce() {
         if (localStorage.getItem(apiOverrideStorageKey) !== null) return activeApiBase();
         const current = (window.UBERS_API_BASE_URL || activeApiBase() || '').replace(/\/+$/, '');
         const seen = new Set();
-        for (let i = 0; i < UBERS_API_BASE_SOURCES.length; i += 1) {
+        for (const source of UBERS_API_BASE_SOURCES) {
           let url = '';
           try {
-            url = await fetchApiBaseCandidate(UBERS_API_BASE_SOURCES[i], i);
+            url = await fetchApiBaseCandidate(source);
           } catch {
             url = '';
           }
@@ -137,6 +153,39 @@ function resolveApiBaseOnce() {
     })();
   }
   return apiBaseResolutionPromise;
+}
+
+let apiReconnectTimer = null;
+
+// After a network failure keep re-resolving the server address in the
+// background until a health check passes, so the page recovers on its own
+// when the tunnel rotates — no reload needed.
+function scheduleApiReconnect() {
+  if (apiReconnectTimer) return;
+  const attempt = async () => {
+    try {
+      resetApiBaseResolution();
+      const base = (await resolveApiBaseOnce()) || location.origin;
+      const probe = await fetch(`${base}/api/health`, {
+        headers: { 'cf-skip-browser-warning': '1' },
+        cache: 'no-store',
+        signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
+      });
+      const health = await probe.json().catch(() => ({}));
+      if (probe.ok && health.apiVersion === 2) {
+        clearInterval(apiReconnectTimer);
+        apiReconnectTimer = null;
+        toast('Reconnected to the UBERS server.');
+        refreshAccount().catch(() => {});
+        if (typeof refreshJobList === 'function') refreshJobList().catch(() => {});
+        if (typeof refreshDriverJobs === 'function') refreshDriverJobs().catch(() => {});
+      }
+    } catch {
+      // still down; the next tick tries again
+    }
+  };
+  attempt();
+  apiReconnectTimer = setInterval(attempt, 6000);
 }
 
 async function api(path, opts = {}, _retryAfterRelocate = false) {
@@ -182,10 +231,24 @@ async function api(path, opts = {}, _retryAfterRelocate = false) {
     const isNetworkFailure = error instanceof TypeError && /fetch|network/i.test(error.message);
     if (window.UBERS_STATIC_MODE && isNetworkFailure && !_retryAfterRelocate) {
       // The tunnel URL probably rotated since this page was cached: re-resolve
-      // the repository variable and retry once against the fresh URL.
+      // the server address from the sources and retry once against the fresh URL.
       resetApiBaseResolution();
       const relocated = await resolveApiBaseOnce();
-      if (relocated && relocated !== apiBase) return api(path, opts, true);
+      if (relocated && relocated !== apiBase) {
+        try {
+          return await api(path, opts, true);
+        } catch (retryError) {
+          if (!(retryError instanceof TypeError)) throw retryError;
+        }
+      }
+    }
+    if (isNetworkFailure) {
+      scheduleApiReconnect();
+      const friendly = new Error('Cannot reach the UBERS server — reconnecting automatically. Try again in a few seconds.');
+      friendly.isNetworkFailure = true;
+      friendly.status = error.status;
+      friendly.setupRequired = error.setupRequired;
+      throw friendly;
     }
     throw error;
   }

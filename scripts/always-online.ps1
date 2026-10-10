@@ -83,6 +83,7 @@ $tunnelProc = $null
 $serverOwned = $false
 $tunnelUrl = $null
 $lastPublishedUrl = $null
+$probeFailures = 0
 $nextServerRestart = [DateTime]::MinValue
 $nextTunnelRestart = [DateTime]::MinValue
 
@@ -128,18 +129,32 @@ try {
     # ---- tunnel ----
     $tunnelDown = (-not $tunnelProc) -or $tunnelProc.HasExited
     if (-not $tunnelDown -and $tunnelProc -and [DateTime]::UtcNow -ge $nextTunnelRestart) {
-      # periodic end-to-end check through the public URL
+      # periodic end-to-end check through the public URL. Two consecutive
+      # failures are required before restarting: one flaky probe must not
+      # rotate a working tunnel (every rotation forces clients to relocate).
+      $probeOk = $false
       try {
         $probe = Invoke-RestMethod -Uri "$tunnelUrl/api/health" `
           -Headers @{ 'cf-skip-browser-warning' = '1'; Origin = 'https://gostudios-real.github.io' } `
           -TimeoutSec 15
-        if (-not $probe.ok) { $tunnelDown = $true }
+        $probeOk = [bool]$probe.ok
+        if (-not $probeOk) { Write-Status 'Tunnel health probe returned not ok.' }
       } catch {
         Write-Status "Tunnel health probe failed: $($_.Exception.Message)"
-        $tunnelDown = $true
       }
-      if ($tunnelDown) { Write-Status 'Public tunnel is unreachable; restarting it.' }
-      else { $nextTunnelRestart = [DateTime]::UtcNow.AddSeconds(60) }
+      if ($probeOk) {
+        $probeFailures = 0
+        $nextTunnelRestart = [DateTime]::UtcNow.AddSeconds(60)
+      } else {
+        $probeFailures += 1
+        if ($probeFailures -ge 2) {
+          Write-Status 'Public tunnel unreachable twice in a row; restarting it.'
+          $tunnelDown = $true
+        } else {
+          Write-Status 'Tunnel probe failed once; re-probing before restarting.'
+          $nextTunnelRestart = [DateTime]::UtcNow.AddSeconds(20)
+        }
+      }
     }
 
     if ($tunnelDown -and [DateTime]::UtcNow -ge $nextTunnelRestart) {
