@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ROBLOX UBERS - Book Roblox Roleplay Rides</title>
-  <meta name="description" content="Plan roleplay rides, book seats on scheduled Roblox game routes, and explore live game servers from your Roblox profile's public games." />
+  <title>ROBLOX UBERS - Real Human Drivers on Roblox</title>
+  <meta name="description" content="Book rides driven by real human drivers in Roblox games, track your trip live, and explore public game servers from your Roblox profile's public games." />
   <link rel="stylesheet" href="./styles.css" />
   <link rel="icon" href="./assets/brand-icon.svg" type="image/svg+xml" />
 </head>
@@ -12,7 +12,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="brand-line"><img src="./assets/brand-icon.svg" alt="" /><span class="logo">UBERS</span></span>
-      <span class="brand-sub">ROBLOX · ROLEPLAY RIDES</span>
+      <span class="brand-sub">ROBLOX · REAL HUMAN DRIVERS</span>
     </div>
     <a class="btn ghost download-link" href="https://github.com/GoStudios-Real/roblox-ubers/releases/latest/download/ROBLOX-UBERS.exe">Download Windows app</a>
     <button class="btn ghost sound-toggle" id="soundToggle" type="button" aria-pressed="false" aria-label="Turn sound effects on">Sound off</button>
@@ -37,20 +37,20 @@
   </header>
 
   <main>
-    <!-- ============ ROLEPLAY RIDES ============ -->
+    <!-- ============ REAL DRIVER RIDES ============ -->
     <section class="view" id="view-book">
       <div class="ride-banner">
-        <img src="./assets/uber-banner.svg" alt="Illustrated UBERS taxi cruising through a colorful roleplay city" />
+        <img src="./assets/uber-banner.svg" alt="Illustrated UBERS taxi cruising through colorful city streets" />
         <div class="ride-banner-copy">
-          <span class="eyebrow">YOUR NEXT ROLEPLAY ADVENTURE</span>
+          <span class="eyebrow">YOUR NEXT REAL DRIVER RIDE</span>
           <h1>Get there together.</h1>
-          <p>Choose a game, plan a route, and reserve seats on a scheduled community roleplay ride.</p>
+          <p>Choose a game, plan a route, and reserve seats with a real human driver.</p>
         </div>
       </div>
       <div class="booking-layout">
         <form class="card booking-form" id="bookingForm">
           <div class="panel-head booking-heading">
-            <div><h2>Plan your ride</h2><p class="muted">Free roleplay reservations. No real-world transport.</p></div>
+            <div><h2>Plan your ride</h2><p class="muted">Free reservations. Real human drivers in Roblox games.</p></div>
             <span class="badge">UP TO 4 SEATS</span>
           </div>
           <div class="form-grid">
@@ -80,22 +80,22 @@
             <label class="form-wide">Departure time
               <select id="rideDeparture" required disabled><option value="">Choose a route and date</option></select>
             </label>
-            <label class="form-wide">Roleplay display name
+            <label class="form-wide">Display name
               <input id="rideName" type="text" minlength="2" maxlength="24" autocomplete="nickname" required placeholder="Name for your booking" />
-              <span class="field-hint">Use a roleplay name only. Don't enter your Roblox password, email, or other private details.</span>
+              <span class="field-hint">Use a display name only. Don't enter your Roblox password, email, or other private details.</span>
             </label>
             <label class="form-wide">Roblox username (optional)
               <div class="input-action">
                 <input id="bookingRobloxUsername" type="text" minlength="3" maxlength="20" autocomplete="off" placeholder="Look up a public Roblox profile" />
                 <button class="btn ghost" type="button" id="bookingProfileLookup">Find profile</button>
               </div>
-              <span class="field-hint">Required to request an NPC ride in a participating game. Public profile lookup is not Roblox sign-in or ownership verification; the same Roblox account must join your ride's game server. Never provide a password or cookie.</span>
+              <span class="field-hint">Lets your human driver find you in game. Public profile lookup is not Roblox sign-in or ownership verification; your driver meets you at the pickup stop in the same Roblox game. Never provide a password or cookie.</span>
             </label>
           </div>
           <div id="bookingProfileResult" class="profile-result" aria-live="polite"></div>
           <div id="timetableList" class="timetable-list" aria-live="polite"></div>
-          <button class="btn booking-submit" id="bookingSubmit" type="submit">Reserve this roleplay ride</button>
-          <p class="muted booking-note">Add your public Roblox username to request an NPC driver. The driver can only run in an owner-controlled Roblox experience that has installed the UBERS server script. Third-party games like Brookhaven RP cannot be driven by UBERS.</p>
+          <button class="btn booking-submit" id="bookingSubmit" type="submit">Reserve this ride</button>
+          <p class="muted booking-note">Real human drivers claim your booking on the Drive tab, then meet you in the Roblox game at the pickup stop. Open the Drive tab to offer your own driving services, or claim someone else's ride with a car, taxi or bus.</p>
           <div id="bookingResult" class="booking-result" role="status" hidden></div>
         </form>
         <aside class="card ride-benefits">
@@ -110,7 +110,7 @@
 
     <section class="view" id="view-myrides">
       <div class="hero">
-        <span class="eyebrow">YOUR ROLEPLAY ITINERARY</span>
+        <span class="eyebrow">YOUR RIDE ITINERARY</span>
         <h1>My bookings</h1>
         <p>Bookings are private. Enter your booking reference and the management key shown once when you reserved.</p>
       </div>
@@ -290,7 +290,7 @@
       <div class="grid" id="gameGrid"></div>
       <div class="card profile-lookup-card">
         <h3>Find a public Roblox profile</h3>
-      <p class="muted">Look up a username to see public profile information and optionally attach it to a roleplay ride. The same account must join an owner-controlled, participating experience for NPC dispatch. This is not account sign-in or ownership verification.</p>
+      <p class="muted">Look up a username to see public profile information and optionally attach it to a ride so your human driver can find you in game. This is not account sign-in or ownership verification.</p>
         <form class="profile-form" id="robloxProfileForm">
           <input id="robloxProfileUsername" type="text" minlength="3" maxlength="20" autocomplete="off" required placeholder="Roblox username" aria-label="Roblox username" />
           <button class="btn" type="submit">Search profile</button>
@@ -309,7 +309,7 @@
     <section class="view" id="view-integrate">
       <div class="hero">
         <h1>Put UBERS tracking in your Roblox game</h1>
-        <p>Public server counts and join links work for everyone. NPC dispatch and map dots require the owner to install the server scripts in an experience they control. Third-party experiences such as Brookhaven RP are examples only; this project cannot join them as a bot or install drivers there.</p>
+        <p>Public server counts and join links work for everyone. Live map dots require the tracker script installed by the experience owner. Third-party experiences such as Brookhaven RP are driven by real human players claiming rides on the Drive tab; this project cannot install scripts there.</p>
       </div>
       <div class="grid">
         <div class="card">
@@ -338,8 +338,8 @@ npm start              # http://localhost:3000</code></pre>
           <p class="muted">Player names and account IDs are not shown. Reports expire after 20 seconds; set the player's <code>UBERS_TrackingOptOut</code> attribute to <code>true</code> to exclude them.</p>
         </div>
         <div class="card">
-          <h3>4. Owner-installed NPC rides</h3>
-          <p class="muted">Copy <code>roblox/UBERS_Dispatch.server.lua</code> into ServerScriptService in an original experience you own or are authorized to integrate, including your own roleplay test place. Configure the server URL/token/map and world bounds, and add your own NPC-equipped car, taxi and bus models under <code>ServerStorage/UBERSVehicles</code>. Place a depot marker named <code>UBERSDepot</code> in Workspace, then load a Profile Games profile whose public games include your published place so bookings, stats, and dispatch use its place ID, and adapt the POIs/routes to your world. A ride can board only after the Roblox account linked to the booking joins that same server. Routes use straight-line sample movement and require adaptation/testing. This cannot add bots to or modify the official Brookhaven RP or Welcome to Bloxburg games.</p>
+          <h3>4. Owner-installed driver scripts</h3>
+          <p class="muted">Copy <code>roblox/UBERS_Dispatch.server.lua</code> into ServerScriptService in an original experience you own or are authorized to integrate, including your own test place. Configure the server URL/token/map and world bounds, and add your own car, taxi and bus models under <code>ServerStorage/UBERSVehicles</code>. Place a depot marker named <code>UBERSDepot</code> in Workspace, then load a Profile Games profile whose public games include your published place so bookings, stats, and dispatch use its place ID, and adapt the POIs/routes to your world. Routes use straight-line sample movement and require adaptation/testing. This cannot add drivers to or modify the official Brookhaven RP or Welcome to Bloxburg games — real human drivers claim those rides on the Drive tab instead.</p>
         </div>
       </div>
       <div class="card">
@@ -352,8 +352,8 @@ npm start              # http://localhost:3000</code></pre>
             <a class="btn" href="./downloads/UBERS_FakeTown_Starter.server.txt" download>Download starter script</a>
           </div>
           <div class="card">
-            <h4>NPC ride dispatch</h4>
-            <p class="muted">Example server dispatcher for an owner-managed Roblox experience.</p>
+            <h4>Driver dispatch</h4>
+            <p class="muted">Example server driver dispatcher for an owner-managed Roblox experience.</p>
             <a class="btn" href="./downloads/UBERS_Dispatch.server.txt" download>Download dispatch script</a>
           </div>
           <div class="card">
@@ -367,8 +367,8 @@ npm start              # http://localhost:3000</code></pre>
         <h3>Endpoints</h3>
         <table class="api">
           <tr><td>GET</td><td>/api/tracking?map=game-90010001</td><td>Live vehicle positions</td></tr>
-          <tr><td>GET</td><td>/api/rides/timetable?map=game-90010001&amp;routeId=b1</td><td>Roleplay departures and remaining seats</td></tr>
-          <tr><td>POST</td><td>/api/bookings</td><td>Reserve 1–4 roleplay seats</td></tr>
+          <tr><td>GET</td><td>/api/rides/timetable?map=game-90010001&amp;routeId=b1</td><td>Departures and remaining seats</td></tr>
+          <tr><td>POST</td><td>/api/bookings</td><td>Reserve 1–4 seats with a real human driver</td></tr>
           <tr><td>POST</td><td>/api/bookings/:reference/lookup</td><td>Private booking lookup (management key in body)</td></tr>
           <tr><td>POST</td><td>/api/bookings/:reference/profile</td><td>Attach a public Roblox profile to a scheduled ride (management key in body)</td></tr>
           <tr><td>DELETE</td><td>/api/bookings/:reference</td><td>Cancel a future booking (management key in body)</td></tr>
@@ -378,9 +378,9 @@ npm start              # http://localhost:3000</code></pre>
           <tr><td>POST</td><td>/api/jobs/:reference/status</td><td>Driver updates ride status (driverCode + status in body)</td></tr>
           <tr><td>POST</td><td>/api/jobs/:reference/release</td><td>Driver releases a claimed job (driverCode in body)</td></tr>
           <tr><td>POST</td><td>/api/roblox/profile</td><td>Resolve public Roblox username and profile (no account sign-in)</td></tr>
-          <tr><td>GET</td><td>/api/roblox/dispatch/next?map=game-90010001</td><td>Owner script checks for a due roleplay ride (token required)</td></tr>
-          <tr><td>POST</td><td>/api/roblox/dispatch/claim</td><td>Owner script claims and spawns a configured NPC vehicle (token required)</td></tr>
-          <tr><td>POST</td><td>/api/roblox/dispatch/:reference/status</td><td>Owner script updates NPC trip status (token required)</td></tr>
+          <tr><td>GET</td><td>/api/roblox/dispatch/next?map=game-90010001</td><td>Owner script checks for a due ride (token required)</td></tr>
+          <tr><td>POST</td><td>/api/roblox/dispatch/claim</td><td>Owner script claims and spawns a configured vehicle (token required)</td></tr>
+          <tr><td>POST</td><td>/api/roblox/dispatch/:reference/status</td><td>Owner script updates trip status (token required)</td></tr>
           <tr><td>POST</td><td>/api/tracking/ping</td><td>Roblox place reports vehicles (x-ubers-token)</td></tr>
           <tr><td>GET</td><td>/api/players?map=game-90010001</td><td>Anonymous, recent player positions</td></tr>
           <tr><td>POST</td><td>/api/players/ping</td><td>Roblox server reports its player roster (x-ubers-token)</td></tr>
@@ -396,20 +396,20 @@ npm start              # http://localhost:3000</code></pre>
       <div class="hero">
         <span class="eyebrow">HELP &amp; HOW-TO</span>
         <h1>Frequently asked questions</h1>
-        <p>Quick answers about roleplay bookings, live game information, and how this fan project works.</p>
+        <p>Quick answers about bookings, real human drivers, live game information, and how this service works.</p>
       </div>
       <div class="faq-list">
-        <details class="card"><summary>Are these real rides or real vehicles?</summary><p>No. UBERS is a fan-made Roblox roleplay dashboard. Reservations are fictional schedules for in-game play and do not arrange transportation, hire drivers, or dispatch real vehicles.</p></details>
-        <details class="card"><summary>Can UBERS put a driver in any Roblox game?</summary><p>No. Only each experience's creator can publish server scripts there. UBERS can dispatch owner-provided NPC vehicles in an experience where you have creator access and install the dispatch script.</p></details>
-        <details class="card"><summary>Can bots spawn cars, buses or taxis to drive me in Brookhaven RP?</summary><p>No, and you should never trust sites that claim otherwise. Making a bot drive inside someone else's game requires a script executor (a hack client), which violates Roblox's terms, gets accounts permanently banned, and often carries malware. Roblox gives outside tools no legal way to run code in a third-party game. That's why UBERS uses two legitimate alternatives: <b>Drive jobs</b> (real players claim your booking and pick you up in-game — see the Drive tab) or <b>owner-installed dispatch</b> (the game's own creator installs the UBERS dispatch script to spawn NPC vehicles in experiences they own).</p></details>
-        <details class="card"><summary>How do Drive jobs work?</summary><p>Open the Drive tab to see open bookings. Claim one with a display name and your Roblox username, and you get a private driver code (saved only in your browser). Join the Roblox game with the join button, meet the rider at the pickup stop with a car, taxi or bus, and use the status buttons — On the way, At pickup, Picked up, Completed. The rider's booking page updates every 15 seconds automatically, so their booking bar shows your progress in real time.</p></details>
+        <details class="card"><summary>Are these real rides or real vehicles?</summary><p>Real drivers, in-game rides. Every ride is claimed by a real human player who drives you to your stop inside a Roblox game. UBERS matches riders and drivers on this website; it does not arrange real-world transportation or dispatch vehicles outside Roblox.</p></details>
+        <details class="card"><summary>Can UBERS put a driver in any Roblox game?</summary><p>Real human drivers work in any game — they join with their own account and drive you in-game. Only each experience's creator can publish server scripts, so automated driver scripts run only in experiences where the creator installs the UBERS dispatch script.</p></details>
+        <details class="card"><summary>Can bots spawn cars, buses or taxis to drive me in Brookhaven RP?</summary><p>No, and you should never trust sites that claim otherwise. Making a bot drive inside someone else's game requires a script executor (a hack client), which violates Roblox's terms, gets accounts permanently banned, and often carries malware. Roblox gives outside tools no legal way to run code in a third-party game. That's why UBERS uses real human drivers: players claim your booking on the <b>Drive</b> tab and pick you up in-game, or a game's own creator installs the UBERS dispatch script for automated vehicles in experiences they own.</p></details>
+        <details class="card"><summary>How do Drive jobs work?</summary><p>Open the Drive tab to see open bookings. Claim one with a display name and your Roblox username, and you get a private driver code (saved only in your browser). Join the Roblox game with the join button, meet the rider at the pickup stop with a car, taxi or bus, and use the status buttons — On the way, At pickup, Picked up, Completed. The rider's booking page updates every 15 seconds automatically, so their Ride tracking bar shows your progress in real time.</p></details>
         <details class="card"><summary>Can the driver and rider end up in different Brookhaven servers?</summary><p>Yes — public Roblox APIs don't let a website place two specific players into one server. Both sides should agree on the same public server from the Roblox API tab's server list (or use a private server link), then meet at the pickup stop. UBERS passes the game, route, stop and time so both sides know exactly where to meet.</p></details>
-        <details class="card"><summary>How do I book and manage a ride?</summary><p>Choose Book a ride, select a game, route, stops, departure and seats, then enter a roleplay display name. You can attach a public Roblox username, but it is not verified sign-in. Save the booking reference and private management key. Use both under My bookings to view or cancel it.</p></details>
+        <details class="card"><summary>How do I book and manage a ride?</summary><p>Choose Book a ride, select a game, route, stops, departure and seats, then enter a display name. You can attach a public Roblox username, but it is not verified sign-in. Save the booking reference and private management key. Use both under My bookings to view or cancel it.</p></details>
         <details class="card"><summary>Why can't I see players on the map?</summary><p>Roblox's public APIs provide aggregate game and public-server information, not player identities or in-world positions. Anonymous position dots only appear for a Roblox experience whose owner has installed and configured this project's tracker.</p></details>
-        <details class="card"><summary>Are seat times and capacity real-time?</summary><p>Seat availability updates from bookings stored on the connected UBERS server. The timetable is a roleplay schedule, not a live vehicle estimate; it doesn't guarantee a player or vehicle will be present in the game.</p></details>
+        <details class="card"><summary>Are seat times and capacity real-time?</summary><p>Seat availability updates from bookings stored on the connected UBERS server. The timetable is a schedule, not a live vehicle estimate; check the Drive tab to see which rides a real human driver has claimed.</p></details>
         <details class="card"><summary>What if the website says bookings aren't connected?</summary><p>GitHub Pages is static. Timetables, booking storage, and cancellation need the UBERS Node server and its HTTPS API tunnel to be online. The Windows app runs the server locally; a Cloudflare Quick Tunnel only works while its connector is running and its address can change.</p></details>
-        <details class="card"><summary>What information do you need?</summary><p>A short roleplay display name, selected stops, departure, and number of seats are stored on the server to manage the booking. Do not enter passwords, email addresses, phone numbers, or other sensitive personal information. Public timetable responses never list rider names or booking references.</p></details>
-        <details class="card"><summary>How do I contact the game creators?</summary><p>ROBLOX UBERS is not affiliated with, endorsed by, or sponsored by Roblox Corporation or the creators of third-party Roblox experiences. Please use their official support channels for game-specific help.</p></details>
+        <details class="card"><summary>What information do you need?</summary><p>A short display name, selected stops, departure, and number of seats are stored on the server to manage the booking. Do not enter passwords, email addresses, phone numbers, or other sensitive personal information. Public timetable responses never list rider names or booking references.</p></details>
+        <details class="card"><summary>How do I contact the game creators?</summary><p>ROBLOX UBERS is GoStudios Of Roblox Transport. For game-specific help, please use the official support channels of the games you play.</p></details>
       </div>
     </section>
 
@@ -417,30 +417,30 @@ npm start              # http://localhost:3000</code></pre>
       <div class="hero">
         <span class="eyebrow">LAST UPDATED: 2026</span>
         <h1>Terms of service &amp; privacy</h1>
-        <p>By using ROBLOX UBERS, you agree to these terms. This is an independent fan project for entertainment and roleplay.</p>
+        <p>By using ROBLOX UBERS, you agree to these terms. ROBLOX UBERS is operated by GoStudios Of Roblox Transport — real human drivers for Roblox.</p>
       </div>
       <article class="card legal-copy">
-        <h2>1. Roleplay service only</h2>
-        <p>ROBLOX UBERS provides maps, game information, and fictional ride timetables and reservations for Roblox roleplay. It is not a taxi, rideshare, transport, emergency, or dispatch service. No real-world journey, driver, vehicle, pickup, safety screening, or arrival time is promised or arranged. Do not rely on it for travel or emergencies.</p>
+        <h2>1. In-game ride service</h2>
+        <p>ROBLOX UBERS provides maps, game information, ride timetables, and reservations for rides driven by real human players inside Roblox games. It is not a real-world taxi, rideshare, transport, emergency, or dispatch service. No real-world journey, vehicle, pickup, safety screening, or arrival time is promised or arranged. Do not rely on it for real-world travel or emergencies.</p>
         <h2>2. Bookings and acceptable use</h2>
-        <p>Bookings reserve in-game roleplay seats only, subject to available capacity on the connected server. Schedules are illustrative and may change or be unavailable. You are responsible for keeping your booking reference and private management key secure. Anyone with that key may view or cancel its booking. Do not submit real names, contact details, passwords, or sensitive personal information as a display name.</p>
-        <p>Drive jobs match volunteer drivers with riders for in-game roleplay only. When you claim a job you see the rider's roleplay display name, departure, stops, and — if the rider attached one — their public Roblox username; never private account data. When you attach a Roblox profile to a ride, volunteer drivers offering a lift can see that public username. Drivers act independently: UBERS does not employ, verify, background-check, or supervise drivers, assigns no real pickup, and promises no arrival. A driver code is a private bearer credential like the management key — keep it secret; anyone holding it can update that ride's status. Both riders and drivers must follow the host game's rules and Roblox's terms; do not use exploits or scripts in games you do not own.</p>
+        <p>Bookings reserve in-game seats only, subject to available capacity on the connected server. Schedules are illustrative and may change or be unavailable. You are responsible for keeping your booking reference and private management key secure. Anyone with that key may view or cancel its booking. Do not submit real names, contact details, passwords, or sensitive personal information as a display name.</p>
+        <p>Drive jobs match volunteer drivers with riders for in-game rides. When you claim a job you see the rider's display name, departure, stops, and — if the rider attached one — their public Roblox username; never private account data. When you attach a Roblox profile to a ride, volunteer drivers offering a lift can see that public username. Drivers act independently: UBERS does not employ, verify, background-check, or supervise drivers, assigns no real pickup, and promises no arrival. A driver code is a private bearer credential like the management key — keep it secret; anyone holding it can update that ride's status. Both riders and drivers must follow the host game's rules and Roblox's terms; do not use exploits or scripts in games you do not own.</p>
         <h2>3. Data and privacy</h2>
-        <p>Booking details (roleplay name, game, route, stops, departure, seats, status, and creation time) are stored in the operator's local app-data folder or the server's configured data directory so the booking can be managed. They are not shown in public timetable listings. The management key is returned at booking time, its hash is stored on the server, and the browser saves the key in local storage for your itinerary. Driver codes work the same way: the code is shown once, only its hash is stored, and the browser keeps it in local storage to list your claimed jobs. Clear this site's browser storage to remove the locally saved keys. The operator should secure and delete server booking data when no longer needed. This independent project does not provide a user account or promise a particular retention period.</p>
+        <p>Booking details (display name, game, route, stops, departure, seats, status, and creation time) are stored in the operator's local app-data folder or the server's configured data directory so the booking can be managed. They are not shown in public timetable listings. The management key is returned at booking time, its hash is stored on the server, and the browser saves the key in local storage for your itinerary. Driver codes work the same way: the code is shown once, only its hash is stored, and the browser keeps it in local storage to list your claimed jobs. Clear this site's browser storage to remove the locally saved keys. The operator should secure and delete server booking data when no longer needed. This service does not provide a user account or promise a particular retention period.</p>
         <p>Live player position reports are available only from experiences where the owner installed the tracker; reports use anonymous identifiers, expire after 20 seconds, and respect the experience's tracking opt-out. Other live game information is sourced from public Roblox APIs. The website may make requests to Roblox, Cloudflare, GitHub Pages, OpenRouter, or Stripe integrations when enabled; those providers apply their own terms and privacy policies.</p>
         <h2>4. Availability and third parties</h2>
-        <p>The service is provided "as is" and may be changed, interrupted, or discontinued. Roblox game content, public servers, names, logos, and marks belong to their respective owners. This project is not affiliated with, endorsed by, or sponsored by Roblox Corporation, Brookhaven RP/Voldex, Welcome to Bloxburg, or Coffee Stain Studios.</p>
+        <p>The service is provided "as is" and may be changed, interrupted, or discontinued. Roblox game content, public servers, names, logos, and marks belong to their respective owners.</p>
         <h2>5. Responsibility</h2>
-        <p>Use the site lawfully and at your own discretion. To the extent permitted by applicable law, the project maintainers disclaim warranties and liability for interruptions, data loss, third-party services, game availability, or consequences of using this fan-made roleplay tool.</p>
+        <p>Use the site lawfully and at your own discretion. To the extent permitted by applicable law, the project maintainers disclaim warranties and liability for interruptions, data loss, third-party services, game availability, or consequences of using this tool.</p>
         <h2>Trademarks &amp; copyright</h2>
         <p>ROBLOX UBERS is a project name and is not claimed here as a registered trademark. "Roblox," game titles, and third-party marks are used only to identify the compatible experiences and remain the property of their respective owners. Original ROBLOX UBERS interface artwork © 2026 GoStudios-Real, except for third-party material credited to its owners. The code is provided under the MIT License in the project repository.</p>
-        <p class="legal-contact">Questions about this independent project? Contact the repository maintainers at <a href="https://github.com/GoStudios-Real/roblox-ubers">GoStudios-Real/roblox-ubers</a>.</p>
+        <p class="legal-contact">Questions about ROBLOX UBERS? Contact GoStudios Of Roblox Transport at <a href="https://github.com/GoStudios-Real/roblox-ubers">GoStudios-Real/roblox-ubers</a>.</p>
       </article>
     </section>
   </main>
 
   <footer class="footer">
-    <span>ROBLOX UBERS © 2026 · Independent roleplay fan project, not affiliated with Roblox Corporation.</span>
+    <span>ROBLOX UBERS / GoStudios Of Roblox Transport © 2026 · Real Human Drivers.</span>
     <span class="footer-links"><a href="#faq">FAQ</a><a href="#legal">Terms &amp; privacy</a><a href="https://github.com/GoStudios-Real/roblox-ubers">Source</a></span>
     <span id="footStats"></span>
   </footer>

@@ -608,11 +608,18 @@ async function main() {
         'view-jobs', 'jobList', 'driverJobList', 'Can bots spawn cars', '/api/jobs/:reference/claim']) {
         if (!html.includes(text)) throw new Error(`index is missing ${text}`);
       }
+      for (const text of ['Real Human Drivers', 'GoStudios Of Roblox Transport']) {
+        if (!html.includes(text)) throw new Error(`index is missing ${text}`);
+      }
+      const lowered = html.toLowerCase();
+      for (const text of ['roleplay', 'not affiliated with', 'fan project', 'npc']) {
+        if (lowered.includes(text)) throw new Error(`index still contains banned copy: ${text}`);
+      }
       const banner = await fetch(`${BASE}/assets/uber-banner.svg`);
-      if (!banner.ok || !(await banner.text()).includes('UBERS roleplay ride banner')) {
+      if (!banner.ok || !(await banner.text()).includes('UBERS real driver ride banner')) {
         throw new Error('brand banner was not served');
       }
-      return 'booking, Drive jobs, FAQ, terms, copyright and SVG banner are served';
+      return 'booking, Drive jobs, Real Human Drivers branding, FAQ, terms and SVG banner are served';
     });
 
     await check('booking-tracker-and-12-hour-times', async () => {

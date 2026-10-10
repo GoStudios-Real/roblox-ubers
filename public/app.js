@@ -76,7 +76,7 @@ async function staticApi(path, opts = {}) {
   const method = (opts.method || 'GET').toUpperCase();
   const { maps } = window.UBERS_STATIC_DATA;
   if (url.pathname.includes('/api/rides/timetable') || url.pathname.includes('/api/bookings')) {
-    throw new Error('Roleplay timetables and bookings need the UBERS server and its Cloudflare HTTPS API connection.');
+    throw new Error('Timetables and bookings need the UBERS server and its Cloudflare HTTPS API connection.');
   }
   const statsFor = (items) => ({
     total: items.length,
@@ -223,7 +223,7 @@ $$('[data-navigate]').forEach((btn) =>
   })
 );
 
-/* ---------------- roleplay bookings ---------------- */
+/* ---------------- real driver bookings ---------------- */
 const bookingStorageKey = 'roblox-ubers-bookings';
 let timetableRequest = 0;
 let savedBookingRefreshTimer = null;
@@ -274,7 +274,7 @@ function addRobloxLaunchLinks(container, placeId, serverId = '') {
 
   const hint = document.createElement('small');
   hint.className = 'muted roblox-launch-hint';
-  hint.textContent = "Opens this ride's Roblox experience on your device. UBERS NPC drivers only run in experiences where you installed the UBERS server script.";
+  hint.textContent = "Opens this ride's Roblox experience on your device. Your human driver meets you in game at the pickup stop.";
   container.append(appLink, webLink, hint);
 }
 
@@ -365,7 +365,7 @@ function dispatchStatusText(status) {
   return ({
     scheduled: 'Scheduled',
     profile_required: 'Add a Roblox profile so a driver can find you',
-    waiting: 'Waiting for a driver or game server',
+    waiting: 'Waiting for a real driver to claim this ride',
     claimed: 'Driver assigned',
     enroute: 'Driver on the way',
     arrived: 'Driver at pickup',
@@ -373,7 +373,7 @@ function dispatchStatusText(status) {
     completed: 'Ride completed',
     failed: 'Dispatch failed',
     cancelled: 'Cancelled'
-  })[status] || 'Roleplay booking';
+  })[status] || 'Ride booking';
 }
 
 async function refreshSavedBookingStatuses() {
@@ -588,7 +588,8 @@ function renderBookingCard(booking, manageKey) {
   trackingHeading.textContent = 'Ride tracking';
   const trackingStatus = document.createElement('p');
   trackingStatus.className = 'ride-tracking-status';
-  trackingStatus.textContent = dispatchStatusText(booking.dispatchStatus);
+  trackingStatus.textContent = dispatchStatusText(booking.dispatchStatus) +
+    (booking.driver ? ` · driven by ${booking.driver.name}` : '');
   const stageNames = ['Booked', 'Driver assigned', 'On the way', 'At pickup', 'On ride', 'Complete'];
   const stageIndex = ({
     scheduled: 0,
@@ -652,7 +653,7 @@ function renderBookingCard(booking, manageKey) {
     const attach = document.createElement('button');
     attach.type = 'submit';
     attach.className = 'btn';
-    attach.textContent = 'Link profile for NPC driver';
+    attach.textContent = 'Link profile for your driver';
     profileForm.append(username, attach);
     profileForm.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -840,7 +841,7 @@ $('#bookingForm').addEventListener('submit', async (event) => {
     saveBooking(booking.reference, booking.manageKey);
     await loadTimetable();
     setBookingResult(
-      'Your roleplay ride is reserved!',
+      'Your ride is reserved!',
       `${booking.reference} · ${booking.routeName} · ${localDateTime(booking.departureAt)}`,
       false,
       booking.manageKey
@@ -1471,7 +1472,7 @@ async function loadGames() {
           <a class="btn game-app-link">Launch Roblox app</a>
           <a class="btn ghost game-link" target="_blank" rel="noopener">Open game page</a>
         </div>
-        <small class="muted roblox-launch-hint">Opens your configured place. UBERS NPC drivers run only where you installed the server script.</small>
+        <small class="muted roblox-launch-hint">Opens this place in Roblox. Meet your human driver at the pickup stop.</small>
         <p class="game-error muted" hidden></p>
         <section class="server-browser">
           <h4>Live public servers</h4>
@@ -1866,8 +1867,8 @@ async function boot() {
   initializeApiConnection();
   if (window.UBERS_STATIC_MODE && !activeApiBase()) {
     $('.brand-sub').textContent = 'ROBLOX · LIVE DATA NOT CONNECTED';
-    $('#view-integrate .hero p').textContent = 'Configure your Cloudflare HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data and roleplay bookings.';
-    addMsg('Live Roblox data and roleplay bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
+    $('#view-integrate .hero p').textContent = 'Configure your Cloudflare HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data and bookings.';
+    addMsg('Live Roblox data and bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
   }
   try {
     const data = await api('/api/maps');
@@ -1907,11 +1908,11 @@ async function boot() {
     $('#pillLive').textContent = '● API NOT CONNECTED';
     $('#pillLive').classList.remove('live');
     $('.brand-sub').textContent = 'ROBLOX · LIVE DATA NOT CONNECTED';
-    $('#view-integrate .hero p').textContent = 'Configure your Cloudflare HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data and roleplay bookings.';
-    addMsg('Live Roblox data and roleplay bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
+    $('#view-integrate .hero p').textContent = 'Configure your Cloudflare HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data and bookings.';
+    addMsg('Live Roblox data and bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
     $('.brand-sub').textContent = 'ROBLOX · LIVE DATA NOT CONNECTED';
-    $('#view-integrate .hero p').textContent = 'Configure your Cloudflare HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data and roleplay bookings.';
-    addMsg('Live Roblox data and roleplay bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
+    $('#view-integrate .hero p').textContent = 'Configure your Cloudflare HTTPS tunnel URL as the UBERS_API_BASE_URL repository variable to connect GitHub Pages to live Roblox data and bookings.';
+    addMsg('Live Roblox data and bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
   } else {
     api('/api/health').then((d) => {
       const on = Object.values(d.integrations || {}).filter(Boolean).length;

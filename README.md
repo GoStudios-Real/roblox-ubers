@@ -1,6 +1,6 @@
-# ROBLOX UBERS
+# ROBLOX UBERS / GoStudios Of Roblox Transport
 
-An Uber-inspired app for original Roblox roleplay test places. Every map is **generated from a Roblox profile's public games** (load any username from the site, or set `ROBLOX_PROFILE_USERNAME`), so routes, stops, and WiFi hotspots come straight from the games you already own or play. Plan in-game rides, reserve and manage seats, and use **free WiFi hotspots**, **OpenRouter AI support**, and **Stripe** integrations.
+An Uber-inspired app with **real human drivers** for Roblox. Every map is **generated from a Roblox profile's public games** (load any username from the site, or set `ROBLOX_PROFILE_USERNAME`), so routes, stops, and WiFi hotspots come straight from the games you already own or play. Plan in-game rides, reserve and manage seats, claim driving jobs, and use **free WiFi hotspots**, **OpenRouter AI support**, and **Stripe** integrations.
 
 ![status](https://img.shields.io/badge/status-live-brightgreen)
 
@@ -17,17 +17,17 @@ An Uber-inspired app for original Roblox roleplay test places. Every map is **ge
 | 💳 Stripe | Premium plans (Rider / Driver / Fleet) with hosted Checkout |
 | 🎮 Roblox API | Live playing/visits/favorites/rating and public servers for the loaded profile games (their root places); other places are rejected |
 | 🔌 Roblox script | `roblox/UBERS_VehicleTracker.server.lua` — reports anonymous player positions and tagged vehicles from your own experience |
-| 🗓️ Timetables | 30-minute roleplay departures on configured map routes, shown in the visitor's local time |
+| 🗓️ Timetables | 30-minute departures on configured map routes, shown in the visitor's local time |
 | 🎟️ Ride bookings | Persistent seat reservations, route capacity checks, private booking references, secure management keys, lookup and cancellation |
 | 🧑‍✈️ Drive jobs | Real players claim open bookings on the Drive tab, get a private hashed driver code, and post live ride statuses (on the way → at pickup → picked up → completed) that update the rider's booking bar |
 | 🔊 Sound effects | Original synthesized interface tones for navigation and notifications, with a saved opt-in sound toggle |
-| 🚘 Owner-run NPC rides | Dispatches a configured NPC vehicle in an experience whose owner installs `roblox/UBERS_Dispatch.server.lua`; the booked Roblox account must join and board that server |
-| ❔ Help & terms | In-app FAQ, roleplay-only terms, privacy details, third-party trademark notices, and a © 2026 notice |
+| 🚘 Owner-run driver scripts | Dispatches a configured vehicle in an experience whose owner installs `roblox/UBERS_Dispatch.server.lua` |
+| ❔ Help & terms | In-app FAQ, terms, privacy details, trademark notices, and a © 2026 notice |
 | 🎨 Brand art | Original custom SVG ride icon and city/taxi banner |
 
-Bookings are fictional and for game roleplay only. They do not dispatch real vehicles or arrange real-world transport. Timetables, bookings, and cancellation need the Node server; the static Pages site reports when that API is unavailable.
+Rides are driven by real human players inside Roblox games. They do not arrange real-world transport. Timetables, bookings, and cancellation need the Node server; the static Pages site reports when that API is unavailable.
 
-NPC dispatch is an optional integration for **your own Roblox experience** only. Load a profile (the `ROBLOX_PROFILE_USERNAME` default or any username in the Profile Games bar) whose public games include your published place; bookings on that game's map carry its root place ID, and the dispatcher uses it. Adapt the generated POIs/routes to your world if needed. Official third-party games like Brookhaven RP are not usable as fallbacks; no third-party place is used. An attached public profile is not account verification; dispatch waits for that Roblox user ID to join the configured participating game server. See [`roblox/README.md`](roblox/README.md) for the Studio starter-world and dispatcher setup.
+Owner-installed driver dispatch is an optional integration for **your own Roblox experience** only. Load a profile (the `ROBLOX_PROFILE_USERNAME` default or any username in the Profile Games bar) whose public games include your published place; bookings on that game's map carry its root place ID, and the dispatcher uses it. Adapt the generated POIs/routes to your world if needed. In third-party games like Brookhaven RP, real human drivers claim rides on the Drive tab instead. An attached public profile is not account verification. See [`roblox/README.md`](roblox/README.md) for the Studio starter-world and dispatcher setup.
 
 ## Quick start
 
@@ -40,11 +40,11 @@ npm test
 
 ## GitHub Pages and Windows app
 
-The GitHub Pages site at <https://gostudios-real.github.io/roblox-ubers/> contains no fabricated player or vehicle positions. Its public-server counts, game stats, and roleplay booking API work when the `UBERS_API_BASE_URL` repository variable points to a running API v2 server's Cloudflare Tunnel HTTPS URL; Pages rejects outdated backends and displays safe static maps until the Windows app is updated. Otherwise live data and booking actions are explicitly unavailable. Pages cannot receive Roblox reports directly. Booking records are stored by the Node server in `data/bookings.json` during development, or `%LOCALAPPDATA%\ROBLOX-UBERS\bookings.json` when packaged as the Windows app. Set `UBERS_DATA_DIR` to choose another server data directory. Back up and protect that folder.
+The GitHub Pages site at <https://gostudios-real.github.io/roblox-ubers/> contains no fabricated player or vehicle positions. Its public-server counts, game stats, and booking API work when the `UBERS_API_BASE_URL` repository variable points to a running API v2 server's Cloudflare Tunnel HTTPS URL; Pages rejects outdated backends and displays safe static maps until the Windows app is updated. Otherwise live data and booking actions are explicitly unavailable. Pages cannot receive Roblox reports directly. Booking records are stored by the Node server in `data/bookings.json` during development, or `%LOCALAPPDATA%\ROBLOX-UBERS\bookings.json` when packaged as the Windows app. Set `UBERS_DATA_DIR` to choose another server data directory. Back up and protect that folder.
 
 To build the Windows executable locally, run `npm ci` and `npm run package:exe`. The versioned `dist/ROBLOX-UBERS-v1.6.0.exe` starts the full server and opens it in your browser; keep its console window open while using the app. Configure integrations in a `.env` file beside the executable. Publishing a `v*` tag builds the executable and attaches it to a GitHub Release.
 
-The Integrate tab on GitHub Pages offers Notepad-friendly `.txt` downloads of the original town starter, NPC dispatcher, and vehicle tracker scripts. Rename a downloaded `.txt` file to `.lua` before installing it in Roblox Studio, and only install scripts in an experience you own or are authorized to edit.
+The Integrate tab on GitHub Pages offers Notepad-friendly `.txt` downloads of the original town starter, driver dispatch, and vehicle tracker scripts. Rename a downloaded `.txt` file to `.lua` before installing it in Roblox Studio, and only install scripts in an experience you own or are authorized to edit.
 
 ### Connect GitHub Pages through Cloudflare Tunnel
 
@@ -83,15 +83,15 @@ Roblox's public API reports aggregate player counts and public server counts, bu
 
 The server uses player account IDs only to create an HMAC pseudonym for refreshing dots; it never returns account IDs, usernames, or Roblox server IDs to the browser. Reports are held in memory and expire when the server stops or the 20-second heartbeat is missed. Make tracking clear to players in your experience.
 
-### Owner-controlled NPC ride dispatch
+### Owner-controlled driver dispatch
 
-This integration does not operate in third-party experiences such as official Brookhaven or Bloxburg. To try NPC rides, open a new experience you own in Roblox Studio, run `roblox/UBERS_FakeTown_Starter.server.lua` from `ServerScriptService`, and publish it. Load a profile whose public games include that place (its `rootPlaceId` becomes the map's `placeId`), so bookings, join links, game stats, and dispatch all point at your own place. Configure route POIs and world bounds to match your experience. The NPC server script must run in the same place configured for the booking. The public Roblox profile lookup is not authentication; only the Roblox account with the looked-up user ID can board in-game.
+This integration does not operate in third-party experiences such as official Brookhaven or Bloxburg — real human drivers claim those rides on the Drive tab. To try owner dispatch, open a new experience you own in Roblox Studio, run `roblox/UBERS_FakeTown_Starter.server.lua` from `ServerScriptService`, and publish it. Load a profile whose public games include that place (its `rootPlaceId` becomes the map's `placeId`), so bookings, join links, game stats, and dispatch all point at your own place. Configure route POIs and world bounds to match your experience. The dispatch server script must run in the same place configured for the booking. The public Roblox profile lookup is not authentication; only the Roblox account with the looked-up user ID can board in-game.
 
 Install and configure `roblox/UBERS_Dispatch.server.lua` in your experience's `ServerScriptService`. Enable HTTP requests, give the server script the server's public HTTPS URL and the same secret `TRACKING_TOKEN`, and follow the vehicle/seat/depot setup in [`roblox/README.md`](roblox/README.md). Do not put the tracking token in a LocalScript, client UI, or a public repository. A ride dispatches in a 15-minute early to 30-minute late window; the rider must join that same server and board within three minutes after pickup arrival. The sample driver moves a configured vehicle in a straight line between map coordinates; it is a basic integration example, not Roblox pathfinding or tested vehicle physics.
 
 ### Driver jobs (real players, no bots)
 
-Third-party experiences such as Brookhaven RP cannot be scripted from outside — a "bot" driving there would require a script executor, which violates Roblox's terms and risks permanent bans and malware. Driver jobs are the legitimate alternative: open the **Drive** tab, claim an open booking, and you get a private driver code (SHA-256 hash stored; shown once; kept in the browser's local storage). Join the game with the join button, meet the rider at the pickup stop with a car, taxi or bus, and advance the status buttons. The rider's booking page polls every 15 seconds, so the booking bar reflects your progress live. Claimed rides are locked out of the NPC dispatcher and other drivers; releasing returns the job to the open list. The public Roblox API cannot place driver and rider into one specific server, so both sides should pick the same public server from the Roblox API tab.
+Third-party experiences such as Brookhaven RP cannot be scripted from outside — a "bot" driving there would require a script executor, which violates Roblox's terms and risks permanent bans and malware. Driver jobs are the legitimate alternative: open the **Drive** tab, claim an open booking, and you get a private driver code (SHA-256 hash stored; shown once; kept in the browser's local storage). Join the game with the join button, meet the rider at the pickup stop with a car, taxi or bus, and advance the status buttons. The rider's booking page polls every 15 seconds, so the rider's Ride tracking bar reflects your progress live. Claimed rides are locked out of the owner dispatcher and other drivers; releasing returns the job to the open list. The public Roblox API cannot place driver and rider into one specific server, so both sides should pick the same public server from the Roblox API tab.
 
 ### Stripe Premium setup
 
@@ -99,7 +99,7 @@ Hosted Checkout requires a private `STRIPE_SECRET_KEY` and a fully onboarded Str
 
 #### BloxBot AI
 
-[BloxBot AI v0.13.7](https://github.com/paralov/app-bloxbot-ai/releases/tag/v0.13.7) can assist an experience creator inside Roblox Studio using Studio's official MCP integration. It is a Studio development assistant, **not a running-game bot or live player client**. Use it to author and test your own vehicle/NPC assets and adapt the owner-installed dispatcher; it cannot join or inject bots into Brookhaven or Bloxburg. This repository does not bundle BloxBot.
+[BloxBot AI v0.13.7](https://github.com/paralov/app-bloxbot-ai/releases/tag/v0.13.7) can assist an experience creator inside Roblox Studio using Studio's official MCP integration. It is a Studio development assistant, **not a running-game bot or live player client**. Use it to author and test your own vehicle assets and adapt the owner-installed dispatcher; it cannot join or inject bots into Brookhaven or Bloxburg. This repository does not bundle BloxBot.
 
 Deep links: `/#book` `/#myrides` `/#map` `/#wifi` `/#ai` `/#premium` `/#roblox` `/#integrate` `/#faq` `/#legal`
 
@@ -165,6 +165,6 @@ See [docs/MAPS_RESEARCH.md](docs/MAPS_RESEARCH.md) for original test-place map l
 
 ## Notes
 
-- ROBLOX UBERS is an independent project and is not affiliated with, endorsed by, or sponsored by Roblox Corporation, Voldex, or Coffee Stain Studios. Third-party names and marks belong to their owners.
+- ROBLOX UBERS / GoStudios Of Roblox Transport · Real Human Drivers. Third-party names and marks belong to their owners.
 - ROBLOX UBERS is not claimed as a registered trademark. Original interface artwork © 2026 GoStudios-Real; code is provided under this repository's MIT License.
 - Stripe Checkout requires an activated Stripe account (`charges_enabled`).
