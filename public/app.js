@@ -274,7 +274,7 @@ function addRobloxLaunchLinks(container, placeId, serverId = '') {
 
   const hint = document.createElement('small');
   hint.className = 'muted roblox-launch-hint';
-  hint.textContent = 'Opens your configured original test place. UBERS NPC drivers only run in experiences where you installed the server script.';
+  hint.textContent = "Opens this ride's Roblox experience on your device. UBERS NPC drivers only run in experiences where you installed the UBERS server script.";
   container.append(appLink, webLink, hint);
 }
 
@@ -1199,6 +1199,27 @@ if (profileForm) {
   });
 }
 
+$$('#profileForm [data-quick]').forEach((btn) =>
+  btn.addEventListener('click', () => {
+    $('#profileUsername').value = btn.dataset.quick;
+    loadProfileGames(btn.dataset.quick);
+  })
+);
+
+const openInRobloxBtn = $('#openInRoblox');
+if (openInRobloxBtn) {
+  openInRobloxBtn.addEventListener('click', () => {
+    const map = state.maps[state.mapId];
+    const placeId = map?.placeId;
+    if (!placeId) {
+      toast('This map has no Roblox place to launch. Load a profile game first.');
+      return;
+    }
+    window.location.href = `roblox://experiences/start?${new URLSearchParams({ placeId: String(placeId) })}`;
+    toast(`Launching ${map.name} in Roblox…`);
+  });
+}
+
 $$('#filters .chip').forEach((b) =>
   b.addEventListener('click', () => {
     $$('#filters .chip').forEach((x) => x.classList.toggle('active', x === b));
@@ -1234,11 +1255,19 @@ async function pollTracking() {
 async function pollPlayers() {
   try {
     const data = await api(`/api/players?map=${state.mapId}`);
-    state.players = data.players.map((p) => ({ ...p, map: state.mapId }));
+    state.players = (data.players || []).map((p) => ({ ...p, map: state.mapId }));
     state.playerServers = data.activeServers || 0;
     state.playerOffline = Boolean(data.offline);
     drawPlayers();
     renderPlayers();
+    const status = $('#playerStatus');
+    if (data.mapKnown === false) {
+      if (status) status.textContent = 'This map is not loaded on the connected server yet. Load its profile in the Profile Games bar.';
+      $('#pillPlayers').textContent = '● WAITING FOR ROBLOX';
+      $('#pillPlayers').classList.remove('live');
+      return;
+    }
+    if (status && !state.players.length) status.textContent = 'No position reports received. Public Roblox server counts are shown in the Roblox API tab.';
     $('#pillPlayers').textContent = state.playerOffline
       ? '● API NOT CONNECTED'
       : state.players.length ? `● ${state.players.length} PLAYERS` : '● WAITING FOR ROBLOX';
@@ -1609,8 +1638,15 @@ async function boot() {
     addMsg('Live Roblox data and roleplay bookings are not connected. Configure a Cloudflare HTTPS tunnel using the setup instructions below.', 'err');
   } else {
     api('/api/health').then((d) => {
-      const on = Object.values(d.integrations).filter(Boolean).length;
-      $('#pillLive').textContent = d.offline ? '● API NOT CONNECTED' : `● LIVE · ${on} integrations`;
+      const on = Object.values(d.integrations || {}).filter(Boolean).length;
+      const games = Number(d.maps) || 0;
+      $('#pillLive').textContent = d.offline
+        ? '● API NOT CONNECTED'
+        : on
+          ? `● LIVE · ${on} INTEGRATIONS`
+          : games
+            ? `● LIVE · ${games} GAMES`
+            : '● LIVE';
       if (d.offline) $('#pillLive').classList.remove('live');
     }).catch(() => {});
   }

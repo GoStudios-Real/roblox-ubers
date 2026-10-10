@@ -135,8 +135,12 @@
       <div class="profile-bar">
         <form id="profileForm" class="profile-form">
           <label for="profileUsername">Profile Games</label>
-          <input id="profileUsername" type="text" minlength="3" maxlength="20" autocomplete="off" placeholder="Roblox username (e.g. Roblox)" />
+          <input id="profileUsername" type="text" minlength="3" maxlength="20" autocomplete="off" placeholder="Roblox username or group:<id>" />
           <button class="btn ghost" type="submit">Load games</button>
+          <span class="quick-profiles">
+            <button class="chip" type="button" data-quick="group:3104358">🏡 Brookhaven RP</button>
+            <button class="chip" type="button" data-quick="Roblox">🎮 Roblox</button>
+          </span>
         </form>
         <p class="muted" id="profileStatus">Maps are generated from a Roblox profile's public games.</p>
         <div id="profileGames" class="profile-games" aria-live="polite"></div>
@@ -153,6 +157,7 @@
           <button class="chip" data-type="wifi">📶 WiFi</button>
         </div>
         <label class="search"><input id="vehicleSearch" type="search" placeholder="Search plate, driver, route..." /></label>
+        <button class="btn ghost" type="button" id="openInRoblox" title="Open this game in the Roblox desktop app">🚀 Open in Roblox</button>
         <div class="map-stats" id="mapStats"></div>
       </div>
 

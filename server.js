@@ -233,16 +233,26 @@ app.delete('/api/bookings/:id', (req, res) => {
 // ---------- Tracking ----------
 app.get('/api/tracking', (req, res) => {
   const mapId = req.query.map ? String(req.query.map) : null;
-  if (mapId && !getMap(mapId)) return h(res, 404, { error: 'map not found' });
-  h(res, 200, { vehicles: fleet.snapshot(mapId), stats: fleet.stats(), time: Date.now() });
+  const mapKnown = !mapId || Boolean(getMap(mapId));
+  h(res, 200, {
+    vehicles: mapKnown ? fleet.snapshot(mapId) : [],
+    stats: fleet.stats(),
+    mapKnown,
+    time: Date.now()
+  });
 });
 
 app.get('/api/tracking/stats', (_req, res) => h(res, 200, fleet.stats()));
 
 app.get('/api/players', (req, res) => {
   const mapId = req.query.map ? String(req.query.map) : null;
-  if (mapId && !getMap(mapId)) return h(res, 404, { error: 'map not found' });
-  h(res, 200, { ...players.snapshot(mapId), time: Date.now(), ttlMs: players.PLAYER_TTL_MS });
+  const mapKnown = !mapId || Boolean(getMap(mapId));
+  h(res, 200, {
+    ...(mapKnown ? players.snapshot(mapId) : { players: [], activeServers: 0, offline: false }),
+    mapKnown,
+    time: Date.now(),
+    ttlMs: players.PLAYER_TTL_MS
+  });
 });
 
 app.post('/api/players/ping', (req, res) => {

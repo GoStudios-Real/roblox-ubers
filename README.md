@@ -56,7 +56,7 @@ Quick Tunnels display a browser interstitial unless requests include Cloudflare'
 
 ### Profile Games (generated maps)
 
-1. Open the Live Map and type a Roblox username in the **Profile Games** bar (or set `ROBLOX_PROFILE_USERNAME=YourName` in `.env` so every start loads it automatically; `group:<id>` loads a group's games).
+1. Open the Live Map and type a Roblox username in the **Profile Games** bar, or use the one-click chips (`?? Brookhaven RP` loads `group:3104358`, `?? Roblox` loads the official account). Set `ROBLOX_PROFILE_USERNAME` in `.env` to pick the profile loaded on every start (default `group:3104358`; `none` disables it).
 2. The server fetches the profile's public games (`games.roblox.com`), enriches them with playing/visits/ratings/icons, and generates a deterministic map per game: stable POI ids (`central`, `plaza`, `depot`, …), four routes (`b1`, `b2`, `c1`, `v1`), zones, and free WiFi hotspots.
 3. Maps refresh automatically every 5 minutes (`GET /api/maps` re-resolves the default profile; `GET /api/profile/games?username=…` loads another). Fixture mode for tests: `UBERS_PROFILE_FIXTURE=1`.
 
@@ -64,7 +64,7 @@ Map ids are `game-<universeId>`, so bookings, timetables, tracking, and dispatch
 
 ### Always online
 
-Run `npm run always-online` (or `powershell -ExecutionPolicy Bypass -File .\scripts\always-online.ps1`) to supervise the stack:
+Run `START-ALWAYS-ONLINE.cmd` (or `npm run always-online`) to supervise the stack:
 
 - restarts the Node server if it crashes or `/api/health` stops responding,
 - restarts the Cloudflare Quick Tunnel if the public URL dies, waits for the new URL, saves it to `UBERS_API_BASE_URL`, and redeploys GitHub Pages when it changes,

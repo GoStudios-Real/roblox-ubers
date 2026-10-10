@@ -141,6 +141,18 @@ async function main() {
       });
     }
 
+    await check('graceful-unknown-map-feeds', async () => {
+      const playersFeed = await json('/api/players?map=not-a-real-map');
+      if (playersFeed.mapKnown !== false || playersFeed.players.length) {
+        throw new Error('unknown player map should return an empty graceful feed');
+      }
+      const trackingFeed = await json('/api/tracking?map=not-a-real-map');
+      if (trackingFeed.mapKnown !== false || trackingFeed.vehicles.length) {
+        throw new Error('unknown tracking map should return an empty graceful feed');
+      }
+      return 'unknown maps degrade to empty feeds instead of UI errors';
+    });
+
     await check('roblox-api', async () => {
       const d = await json('/api/roblox/games');
       if (d.setupRequired || d.games.length !== 2 ||
@@ -489,7 +501,7 @@ async function main() {
         'refreshBookingDetails()',
         'roblox://experiences/start',
         'Launch Roblox app',
-        'Opens your configured original test place',
+        "Opens this ride's Roblox experience on your device",
         'soundToggle',
         'AudioContext',
         'soundPreferenceKey',
