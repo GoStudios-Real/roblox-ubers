@@ -12,7 +12,8 @@ param(
   [int]$CheckSeconds = 10,
   [switch]$SkipGitHubPages,
   [string]$ServerScript,
-  [string]$CloudflaredPath
+  [string]$CloudflaredPath,
+  [string]$GistId = 'a18e754f09a4b45df7d4ebdddaaa47ea'
 )
 
 $ErrorActionPreference = 'Continue'
@@ -44,11 +45,20 @@ function Test-BackendHealth {
 
 function Publish-TunnelUrl([string]$Url) {
   if ($SkipGitHubPages) { Write-Status "Skipping GitHub Pages update (SkipGitHubPages). URL: $Url"; return }
+  # 1) Public gist: the Pages app reads this at boot (raw host has no API rate limit),
+  #    so stale cached static-config.js can still self-heal to the current tunnel URL.
+  if ($GistId) {
+    & gh api -X PATCH "gists/$GistId" -f "files[ubers-api-base.txt][content]=$Url" 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Status "WARNING: could not update gist $GistId with the tunnel URL." }
+    else { Write-Status "Gist $GistId updated with $Url" }
+  }
+  # 2) Repo variable: baked into static-config.js by the next Pages deploy.
   & gh variable set UBERS_API_BASE_URL --repo $Repository --body $Url 2>&1 | Out-Null
   if ($LASTEXITCODE -ne 0) {
     Write-Status "WARNING: could not set UBERS_API_BASE_URL for $Repository (gh auth/permissions)."
     return
   }
+  # 3) Redeploy Pages so the baked URL matches too.
   & gh workflow run 'Deploy GitHub Pages' --repo $Repository 2>&1 | Out-Null
   if ($LASTEXITCODE -ne 0) { Write-Status 'WARNING: Pages workflow could not be triggered.' }
   else { Write-Status "GitHub Pages redeployed for $Repository." }

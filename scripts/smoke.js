@@ -778,7 +778,8 @@ async function main() {
         'authToken()', 'x-ubers-auth', '/api/auth/signup', '/api/auth/signin', '/api/auth/signout',
         '/api/auth/me', '/api/jobs/mine', 'renderAccountPanel', 'renderDriversMap', 'Next ·',
         "localStorage.getItem('ubersAuth')", 'Sign out', 'SIGNED IN', 'routeMapSvg',
-        'actions/variables/UBERS_API_BASE_URL', 'resolveApiBaseOnce', 'resetApiBaseResolution'
+        'actions/variables/UBERS_API_BASE_URL', 'resolveApiBaseOnce', 'resetApiBaseResolution',
+        'gist.githubusercontent.com', 'ubers-api-base.txt'
       ]) {
         if (!app.includes(text)) throw new Error(`app.js is missing ${text}`);
       }

@@ -66,9 +66,36 @@ function resetApiBaseResolution() {
   apiServerOutdated = false;
 }
 
+// Current tunnel URL, published by the always-online supervisor. The public gist
+// raw host has no anonymous API rate limit, so it is tried first; the GitHub
+// Actions repository variable is the backup source; the URL baked into
+// static-config.js is the last resort.
+const UBERS_API_BASE_SOURCES = [
+  'https://gist.githubusercontent.com/GoStudios-Real/a18e754f09a4b45df7d4ebdddaaa47ea/raw/ubers-api-base.txt',
+  'https://api.github.com/repos/GoStudios-Real/roblox-ubers/actions/variables/UBERS_API_BASE_URL'
+];
+
+function apiUrlFromText(text) {
+  const value = String(text || '').trim().split(/\r?\n/)[0];
+  return /^https?:\/\/\S+$/.test(value) ? value.replace(/\/+$/, '') : '';
+}
+
+async function fetchApiBaseCandidate(source, index) {
+  const timeout = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined;
+  const res = await fetch(index === 0 ? `${source}?cb=${Date.now()}` : source, {
+    headers: index === 0 ? {} : { Accept: 'application/vnd.github+json' },
+    cache: 'no-store',
+    signal: timeout
+  });
+  if (!res.ok) return '';
+  if (index === 0) return apiUrlFromText(await res.text().catch(() => ''));
+  const data = await res.json().catch(() => ({}));
+  return String(data.value || '').replace(/\/+$/, '');
+}
+
 // GitHub Pages bakes the tunnel URL into static-config.js at deploy time, and
 // browsers cache that file. Quick-tunnel URLs rotate whenever the tunnel
-// restarts, so at boot we ask GitHub for the *current* repository variable and
+// restarts, so at boot we ask for the *current* URL from the sources above and
 // health-check it before falling back to the baked-in URL. A manual server
 // address entered by the user always wins.
 function resolveApiBaseOnce() {
@@ -77,30 +104,31 @@ function resolveApiBaseOnce() {
     apiBaseResolutionPromise = (async () => {
       try {
         if (localStorage.getItem(apiOverrideStorageKey) !== null) return activeApiBase();
-        const baked = (window.UBERS_API_BASE_URL || '').replace(/\/+$/, '');
-        const timeout = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined;
-        const res = await fetch('https://api.github.com/repos/GoStudios-Real/roblox-ubers/actions/variables/UBERS_API_BASE_URL', {
-          headers: { Accept: 'application/vnd.github+json' },
-          cache: 'no-store',
-          signal: timeout
-        });
-        if (!res.ok) return baked;
-        const data = await res.json().catch(() => ({}));
-        const url = String(data.value || '').replace(/\/+$/, '');
-        if (!url || url === baked) return baked || url;
-        try {
-          const probe = await fetch(`${url}/api/health`, {
-            headers: { 'cf-skip-browser-warning': '1' },
-            cache: 'no-store',
-            signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
-          });
-          const health = await probe.json().catch(() => ({}));
-          if (probe.ok && health.apiVersion === 2) {
-            window.UBERS_API_BASE_URL = url;
-            return url;
+        const current = (window.UBERS_API_BASE_URL || activeApiBase() || '').replace(/\/+$/, '');
+        const seen = new Set();
+        for (let i = 0; i < UBERS_API_BASE_SOURCES.length; i += 1) {
+          let url = '';
+          try {
+            url = await fetchApiBaseCandidate(UBERS_API_BASE_SOURCES[i], i);
+          } catch {
+            url = '';
           }
-        } catch {
-          // candidate URL is dead; keep the baked one
+          if (!url || url === current || seen.has(url)) continue;
+          seen.add(url);
+          try {
+            const probe = await fetch(`${url}/api/health`, {
+              headers: { 'cf-skip-browser-warning': '1' },
+              cache: 'no-store',
+              signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
+            });
+            const health = await probe.json().catch(() => ({}));
+            if (probe.ok && health.apiVersion === 2) {
+              window.UBERS_API_BASE_URL = url;
+              return url;
+            }
+          } catch {
+            // candidate URL is dead; try the next source
+          }
         }
         return activeApiBase();
       } catch {
