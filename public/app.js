@@ -58,44 +58,109 @@ function setAuthToken(token) {
   }
 }
 
-async function api(path, opts = {}) {
-  const apiBase = activeApiBase();
+let apiBaseResolutionPromise = null;
+
+function resetApiBaseResolution() {
+  apiBaseResolutionPromise = null;
+  apiCompatibilityPromise = null;
+  apiServerOutdated = false;
+}
+
+// GitHub Pages bakes the tunnel URL into static-config.js at deploy time, and
+// browsers cache that file. Quick-tunnel URLs rotate whenever the tunnel
+// restarts, so at boot we ask GitHub for the *current* repository variable and
+// health-check it before falling back to the baked-in URL. A manual server
+// address entered by the user always wins.
+function resolveApiBaseOnce() {
+  if (!window.UBERS_STATIC_MODE) return Promise.resolve(activeApiBase());
+  if (!apiBaseResolutionPromise) {
+    apiBaseResolutionPromise = (async () => {
+      try {
+        if (localStorage.getItem(apiOverrideStorageKey) !== null) return activeApiBase();
+        const baked = (window.UBERS_API_BASE_URL || '').replace(/\/+$/, '');
+        const timeout = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined;
+        const res = await fetch('https://api.github.com/repos/GoStudios-Real/roblox-ubers/actions/variables/UBERS_API_BASE_URL', {
+          headers: { Accept: 'application/vnd.github+json' },
+          cache: 'no-store',
+          signal: timeout
+        });
+        if (!res.ok) return baked;
+        const data = await res.json().catch(() => ({}));
+        const url = String(data.value || '').replace(/\/+$/, '');
+        if (!url || url === baked) return baked || url;
+        try {
+          const probe = await fetch(`${url}/api/health`, {
+            headers: { 'cf-skip-browser-warning': '1' },
+            cache: 'no-store',
+            signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
+          });
+          const health = await probe.json().catch(() => ({}));
+          if (probe.ok && health.apiVersion === 2) {
+            window.UBERS_API_BASE_URL = url;
+            return url;
+          }
+        } catch {
+          // candidate URL is dead; keep the baked one
+        }
+        return activeApiBase();
+      } catch {
+        return activeApiBase();
+      }
+    })();
+  }
+  return apiBaseResolutionPromise;
+}
+
+async function api(path, opts = {}, _retryAfterRelocate = false) {
+  const apiBase = await resolveApiBaseOnce();
   if (window.UBERS_STATIC_MODE && !apiBase) return staticApi(path, opts);
   const tunnelHeaders = apiBase.includes('.trycloudflare.com') ? { 'cf-skip-browser-warning': '1' } : {};
-  if (window.UBERS_STATIC_MODE && !apiCompatibilityPromise) {
-    apiCompatibilityPromise = fetch(`${apiBase}/api/health`, { headers: tunnelHeaders })
-      .then(async (response) => {
-        const health = await response.json().catch(() => ({}));
-        if (health.apiVersion !== 2) {
-          apiServerOutdated = true;
-          throw new Error('The connected UBERS server is outdated. Update and restart the Windows app to enable bookings, Roblox usernames, and owner-place safety.');
-        }
-        if (!response.ok) throw new Error('The connected UBERS server is not responding correctly.');
-      });
-  }
-  if (window.UBERS_STATIC_MODE) await apiCompatibilityPromise;
-  const headers = { 'Content-Type': 'application/json', ...tunnelHeaders };
-  const token = authToken();
-  if (token) headers['x-ubers-auth'] = token;
-  Object.assign(headers, opts.headers || {});
-  const res = await fetch(`${apiBase}${path}`, {
-    ...opts,
-    headers,
-    body: opts.body ? JSON.stringify(opts.body) : undefined
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    if (res.status === 401 && path !== '/api/auth/me' && path !== '/api/auth/signin' && path !== '/api/auth/signup') {
-      setAuthToken('');
-      currentAccount = null;
-      renderAccountPanel();
+  try {
+    if (window.UBERS_STATIC_MODE && !apiCompatibilityPromise) {
+      apiCompatibilityPromise = fetch(`${apiBase}/api/health`, { headers: tunnelHeaders })
+        .then(async (response) => {
+          const health = await response.json().catch(() => ({}));
+          if (health.apiVersion !== 2) {
+            apiServerOutdated = true;
+            throw new Error('The connected UBERS server is outdated. Update and restart the Windows app to enable bookings, Roblox usernames, and owner-place safety.');
+          }
+          if (!response.ok) throw new Error('The connected UBERS server is not responding correctly.');
+        });
     }
-    const error = new Error(data.error || `Request failed (${res.status})`);
-    error.setupRequired = Boolean(data.setupRequired);
-    error.status = res.status;
+    if (window.UBERS_STATIC_MODE) await apiCompatibilityPromise;
+    const headers = { 'Content-Type': 'application/json', ...tunnelHeaders };
+    const token = authToken();
+    if (token) headers['x-ubers-auth'] = token;
+    Object.assign(headers, opts.headers || {});
+    const res = await fetch(`${apiBase}${path}`, {
+      ...opts,
+      headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 401 && path !== '/api/auth/me' && path !== '/api/auth/signin' && path !== '/api/auth/signup') {
+        setAuthToken('');
+        currentAccount = null;
+        renderAccountPanel();
+      }
+      const error = new Error(data.error || `Request failed (${res.status})`);
+      error.setupRequired = Boolean(data.setupRequired);
+      error.status = res.status;
+      throw error;
+    }
+    return data;
+  } catch (error) {
+    const isNetworkFailure = error instanceof TypeError && /fetch|network/i.test(error.message);
+    if (window.UBERS_STATIC_MODE && isNetworkFailure && !_retryAfterRelocate) {
+      // The tunnel URL probably rotated since this page was cached: re-resolve
+      // the repository variable and retry once against the fresh URL.
+      resetApiBaseResolution();
+      const relocated = await resolveApiBaseOnce();
+      if (relocated && relocated !== apiBase) return api(path, opts, true);
+    }
     throw error;
   }
-  return data;
 }
 
 async function staticApi(path, opts = {}) {
@@ -2187,6 +2252,7 @@ function activateView(name, wifiPreselect) {
 }
 
 async function boot() {
+  await resolveApiBaseOnce().catch(() => {});
   initializeApiConnection();
   refreshAccount().catch(() => {});
   if (window.UBERS_STATIC_MODE && !activeApiBase()) {

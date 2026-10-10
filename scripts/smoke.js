@@ -777,7 +777,8 @@ async function main() {
       for (const text of [
         'authToken()', 'x-ubers-auth', '/api/auth/signup', '/api/auth/signin', '/api/auth/signout',
         '/api/auth/me', '/api/jobs/mine', 'renderAccountPanel', 'renderDriversMap', 'Next ·',
-        "localStorage.getItem('ubersAuth')", 'Sign out', 'SIGNED IN', 'routeMapSvg'
+        "localStorage.getItem('ubersAuth')", 'Sign out', 'SIGNED IN', 'routeMapSvg',
+        'actions/variables/UBERS_API_BASE_URL', 'resolveApiBaseOnce', 'resetApiBaseResolution'
       ]) {
         if (!app.includes(text)) throw new Error(`app.js is missing ${text}`);
       }
