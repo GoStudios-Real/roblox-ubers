@@ -95,15 +95,18 @@ try {
       }
       if (-not $serverProc -and [DateTime]::UtcNow -ge $nextServerRestart) {
         Write-Status "Starting ROBLOX UBERS server on port $HealthPort."
+        $serverWorkingDirectory = Split-Path -Parent $ServerScript
         if ($ServerScript -like '*.exe') {
           $serverProc = Start-Process -FilePath $ServerScript `
             -ArgumentList @() `
+            -WorkingDirectory $serverWorkingDirectory `
             -RedirectStandardOutput $serverLog -RedirectStandardError "$serverLog.err" `
             -PassThru -WindowStyle Hidden
         } else {
           $env:PORT = [string]$HealthPort
           $serverProc = Start-Process -FilePath $nodeExe `
-            -ArgumentList @($ServerScript) `
+            -ArgumentList @("`"$ServerScript`"") `
+            -WorkingDirectory $serverWorkingDirectory `
             -RedirectStandardOutput $serverLog -RedirectStandardError "$serverLog.err" `
             -PassThru -WindowStyle Hidden
         }
