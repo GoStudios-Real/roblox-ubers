@@ -20,9 +20,9 @@
       <button class="tab" data-view="book">Book a ride</button>
       <button class="tab" data-view="myrides">My bookings</button>
       <button class="tab" data-view="jobs">Drive</button>
-      <button class="tab active" data-view="map">Live Map</button>
+      <button class="tab active" data-view="map" aria-current="page">Live Map</button>
       <button class="tab" data-view="wifi">Free WiFi</button>
-      <button class="tab" data-view="ai">AI Support</button>
+      <button class="tab" data-view="ai"><svg class="ai-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2.8 13.9 9l6.3 2-6.3 2L12 19.2 10.1 13l-6.3-2 6.3-2L12 2.8Z" fill="currentColor"/><path d="m19.1 16.2.8 2.4 2.3.8-2.3.7-.8 2.4-.7-2.4-2.4-.7 2.4-.8.7-2.4Z" fill="currentColor"/></svg>AI Support</button>
       <button class="tab" data-view="premium">Premium</button>
       <button class="tab" data-view="roblox">Roblox API</button>
       <button class="tab" data-view="integrate">Integrate</button>
@@ -259,14 +259,17 @@
     <section class="view" id="view-ai">
       <div class="chat-wrap">
         <div class="chat-head">
-          <h3>UBERS AI Support</h3>
+          <div class="chat-identity">
+            <span class="ai-mark"><svg class="ai-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2.8 13.9 9l6.3 2-6.3 2L12 19.2 10.1 13l-6.3-2 6.3-2L12 2.8Z" fill="currentColor"/><path d="m19.1 16.2.8 2.4 2.3.8-2.3.7-.8 2.4-.7-2.4-2.4-.7 2.4-.8.7-2.4Z" fill="currentColor"/></svg></span>
+            <h2>UBERS AI Support</h2>
+          </div>
           <span class="pill" id="aiModel">powered by OpenRouter</span>
         </div>
-        <div class="chat-log" id="chatLog">
+        <div class="chat-log" id="chatLog" role="log" aria-label="Conversation with UBERS AI Support" aria-live="polite" aria-relevant="additions text">
           <div class="msg bot">Hi! I'm the ROBLOX UBERS assistant. Ask me about tracking, WiFi hotspots, premium plans or the Roblox API.</div>
         </div>
         <form class="chat-form" id="chatForm">
-          <input id="chatInput" type="text" autocomplete="off" placeholder="How do I track the bus in my game?" />
+          <input id="chatInput" type="text" autocomplete="off" aria-label="Message UBERS AI Support" placeholder="How do I track the bus in my game?" />
           <button class="btn" type="submit">Send</button>
         </form>
       </div>
