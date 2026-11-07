@@ -1644,7 +1644,6 @@ async function loadGames() {
       const card = document.createElement('div');
       card.className = 'card game';
       card.innerHTML = `
-        <img loading="lazy">
         <h3></h3>
         <div class="stat-row"><span>Playing now</span><b data-stat="playing"></b></div>
         <div class="stat-row"><span>Visits</span><b data-stat="visits"></b></div>
@@ -1664,10 +1663,14 @@ async function loadGames() {
           <button class="btn ghost server-more" type="button" hidden>Load next 100 servers</button>
         </section>`;
       const title = g.name || `Place ${g.placeId}`;
-      const image = card.querySelector('img');
-      image.src = g.icon || '';
-      image.alt = title;
-      image.addEventListener('error', () => { image.hidden = true; }, { once: true });
+      if (g.icon) {
+        const image = document.createElement('img');
+        image.loading = 'lazy';
+        image.src = g.icon;
+        image.alt = title;
+        image.addEventListener('error', () => image.remove(), { once: true });
+        card.prepend(image);
+      }
       card.querySelector('h3').textContent = title;
       card.querySelector('[data-stat="playing"]').textContent = fmt(g.playing);
       card.querySelector('[data-stat="visits"]').textContent = fmt(g.visits);
@@ -2314,7 +2317,12 @@ function renderDriverJobRow(entry, job) {
 function activateView(name, wifiPreselect) {
   if (!$(`#view-${name}`)) return;
   if (location.hash !== `#${name}`) location.hash = name;
-  $$('#tabs .tab').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
+  $$('#tabs .tab').forEach((b) => {
+    const active = b.dataset.view === name;
+    b.classList.toggle('active', active);
+    if (active) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${name}`));
   if (name === 'wifi') loadWifi(wifiPreselect);
   if (name === 'premium') loadPlans();
