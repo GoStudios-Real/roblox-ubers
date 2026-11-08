@@ -174,3 +174,11 @@ See [docs/MAPS_RESEARCH.md](docs/MAPS_RESEARCH.md) for original test-place map l
 - ROBLOX UBERS / GoStudios Of Roblox Transport · Real Human Drivers. Third-party names and marks belong to their owners.
 - ROBLOX UBERS is not claimed as a registered trademark. Original interface artwork © 2026 GoStudios-Real; code is provided under this repository's MIT License.
 - Stripe Checkout requires an activated Stripe account (`charges_enabled`).
+
+
+---
+
+## OpenCode
+
+This repository is maintained with [OpenCode](https://opencode.ai).
+Hub: https://gostudios-real.github.io/
